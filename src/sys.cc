@@ -21,20 +21,19 @@ extern std::string log_file_path;
 
 System::~System()
 {
-	delete Configs::get_instance();
-	delete Logger::get_instance();
+	Http_server::get_instance()->do_exit = 1;
+	Http_server::get_instance()->join_all();
+	delete Http_server::get_instance();
 
 	Job::get_instance()->do_exit = 1;
 	Job::get_instance()->join_all();
 	delete Job::get_instance();
 
+	delete Http_client::get_instance();
 	delete Node_info::get_instance();
 
-	Http_server::get_instance()->do_exit = 1;
-	Http_server::get_instance()->join_all();
-	delete Http_server::get_instance();
-
-	delete Http_client::get_instance();
+	delete Configs::get_instance();
+	delete Logger::get_instance();
 
 	Thread_manager::do_exit = 1;
 	Thread_manager::get_instance()->join_all();

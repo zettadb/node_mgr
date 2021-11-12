@@ -22,16 +22,17 @@ class Http_server
 public:
 	enum Http_type {HTTP_NONE, HTTP_GET, HTTP_POST};
 	enum Content_type {Content_NONE, Content_form_urlencoded, Content_form_data};
-	volatile int do_exit;
+	static int do_exit;
 private:
 	static Http_server *m_inst;
 	Http_server();
 	
-	std::vector<pthread_t*> vec_pthread;
+	std::vector<pthread_t> vec_pthread;
 	pthread_mutex_t thread_mtx;
 	pthread_cond_t thread_cond;
 	std::queue<int> que_socket;
-
+	int wakeupfd;
+	
 public:
 	~Http_server();
 	static Http_server *get_instance()

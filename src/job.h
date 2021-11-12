@@ -41,12 +41,12 @@ class Job
 public:
 
 	std::queue<std::string> que_job;
-	volatile int do_exit;
+	static int do_exit;
 	
 private:
 	static Job *m_inst;
 
-	std::vector<pthread_t*> vec_pthread;
+	std::vector<pthread_t> vec_pthread;
 	pthread_mutex_t thread_mtx;
 	pthread_cond_t thread_cond;
 

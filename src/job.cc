@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 
 Job* Job::m_inst = NULL;
+int Job::do_exit = 0;
 
 int64_t num_job_threads = 3;
 extern int64_t http_server_port;
@@ -38,8 +39,7 @@ extern int64_t stmt_retry_interval_ms;
 extern "C" void *thread_func_job_work(void*thrdarg);
 
 Job::Job():
-	path_id(0),
-	do_exit(0)
+	path_id(0)
 {
 	
 }
@@ -67,7 +67,7 @@ void Job::start_job_thread()
 			do_exit = 1;
 			return;
 		}
-		vec_pthread.push_back(&hdl);
+		vec_pthread.push_back(hdl);
 	}
 }
 
@@ -80,7 +80,7 @@ void Job::join_all()
 	
 	for (auto &i:vec_pthread)
 	{
-		pthread_join(*i, NULL);
+		pthread_join(i, NULL);
 	}
 }
 

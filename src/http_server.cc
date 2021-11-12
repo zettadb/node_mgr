@@ -11,6 +11,9 @@
 #include "sys.h"
 #include "job.h"
 #include "http_server.h"
+#include <signal.h>
+#include <poll.h>
+#include <sys/eventfd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -40,6 +43,7 @@ extern "C" void *thread_func_http_server_accept(void*thrdarg);
 extern "C" void *thread_func_http_server_work(void*thrdarg);
 
 Http_server* Http_server::m_inst = NULL;
+int Http_server::do_exit = 0;
 
 int64_t num_http_threads = 3;
 int64_t http_server_port = 1000;
@@ -49,7 +53,7 @@ std::string mysql_install_path;
 std::string pgsql_install_path;
 
 Http_server::Http_server():
-	do_exit(0)
+	wakeupfd(0)
 {
 
 }
@@ -75,7 +79,7 @@ void Http_server::start_http_thread()
 		do_exit = 1;
 		return;
 	}
-	vec_pthread.push_back(&hdl);
+	vec_pthread.push_back(hdl);
 
 	//start http server work thread
 	for(int i=0; i<num_http_threads; i++)
@@ -89,20 +93,27 @@ void Http_server::start_http_thread()
 			do_exit = 1;
 			return;
 		}
-		vec_pthread.push_back(&hdl);
+		vec_pthread.push_back(hdl);
 	}
 }
 
 void Http_server::join_all()
 {
 	do_exit = 1;
+	if(wakeupfd>0)
+	{
+		uint64_t one = 1;
+		write(wakeupfd, &one, sizeof one);	
+		close(wakeupfd);
+	}
+	
 	pthread_mutex_lock(&thread_mtx);
 	pthread_cond_broadcast(&thread_cond);
 	pthread_mutex_unlock(&thread_mtx);
 
 	for (auto &i:vec_pthread)
 	{
-		pthread_join(*i, NULL);
+		pthread_join(i, NULL);
 	}
 }
 
@@ -239,7 +250,7 @@ void Http_server::Http_server_handle(int socket)
 		//syslog(Logger::INFO, "type:%d", type);
 		std::string path;
 		Get_http_path(http_buf, path);
-		syslog(Logger::INFO, "path:%s", path.c_str());
+		//syslog(Logger::INFO, "path:%s", path.c_str());
 
 		if(type == HTTP_GET)
 		{
@@ -264,7 +275,6 @@ void Http_server::Http_server_handle(int socket)
 	}
 
 	close(socket);
-	syslog(Logger::INFO, "===========close(socket)");
 }
 
 void Http_server::Http_server_handle_get(int &socket, std::string &path)
@@ -582,30 +592,66 @@ void Http_server::Http_server_accept()
 	int client_socket = 0;
 	struct sockaddr_in client_addr;
 	socklen_t len = sizeof(client_addr);
-	int ls = Listen_socket(http_server_port);
+	int listenfd = Listen_socket(http_server_port);
+	if(listenfd>0)
+		syslog(Logger::INFO, "Http server listen at port: %d start", http_server_port);
+	else
+		syslog(Logger::ERROR, "Http server listen at port: %d fail", http_server_port);
 
-	syslog(Logger::INFO, "Http server start listen at port: %d", http_server_port);
-	
+	wakeupfd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+
+	struct pollfd pfdlisten;
+	pfdlisten.fd = listenfd;
+	pfdlisten.events = POLLIN;
+
+	struct pollfd pfdwakeup;
+	pfdwakeup.fd = wakeupfd;
+	pfdwakeup.events = POLLIN;
+
+	std::vector<struct pollfd> pollfds;
+	pollfds.push_back(pfdlisten);
+	pollfds.push_back(pfdwakeup);
+
 	while (!Http_server::do_exit)
 	{
-		memset(&client_addr, 0, sizeof(client_addr));
-		client_socket = accept(ls, (struct sockaddr *)&client_addr, &len);
-
-		if (client_socket <= 0)
+		int nready = poll(&*pollfds.begin(), pollfds.size(), -1);
+		if (nready == -1)
 		{
-			syslog(Logger::ERROR, "accept failed %d", client_socket);
+			if (errno == EINTR)
+				continue;
+			
+			syslog(Logger::ERROR, "poll failed");
 			close(client_socket);
 			return;
-		} 
-		else
-		{
-			syslog(Logger::INFO, "received from %s at port %d", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
-			pthread_mutex_lock(&thread_mtx);
-			que_socket.push(client_socket);
-			pthread_cond_signal(&thread_cond);
-			pthread_mutex_unlock(&thread_mtx);
 		}
+		else if (nready == 0)	// nothing
+		{
+			continue;
+		}
+
+		if (pollfds[0].revents & POLLIN)
+		{
+			memset(&client_addr, 0, sizeof(client_addr));
+			client_socket = accept4(listenfd, (struct sockaddr *)&client_addr, &len, SOCK_NONBLOCK | SOCK_CLOEXEC);
+			
+			if (client_socket <= 0)
+			{
+				syslog(Logger::ERROR, "accept failed %d", client_socket);
+				close(listenfd);
+				return;
+			} 
+			else
+			{
+				syslog(Logger::INFO, "received from %s at port %d", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+			
+				pthread_mutex_lock(&thread_mtx);
+				que_socket.push(client_socket);
+				pthread_cond_signal(&thread_cond);
+				pthread_mutex_unlock(&thread_mtx);
+			}
+
+		}
+
 	}
 }
 
