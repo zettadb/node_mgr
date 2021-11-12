@@ -1,0 +1,371 @@
+/*
+   Copyright (c) 2019-2021 ZettaDB inc. All rights reserved.
+
+   This source code is licensed under Apache 2.0 License,
+   combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
+*/
+
+#include "global.h"
+#include "log.h"
+#include "cjson.h"
+#include "node_info.h"
+#include "http_client.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <signal.h>
+#include <unistd.h>
+#include <iostream>
+
+Node_info* Node_info::m_inst = NULL;
+
+int64_t stmt_retries = 3;
+int64_t stmt_retry_interval_ms = 500;
+
+std::string cluster_mgr_http_ip;
+int64_t cluster_mgr_http_port = 0;
+
+Node_info::Node_info():
+	node_update_finish(false)
+{
+
+}
+
+Node_info::~Node_info()
+{
+	for (auto &node:vec_meta_node)
+		delete node;
+	vec_meta_node.clear();
+	for (auto &node:vec_storage_node)
+		delete node;
+	vec_storage_node.clear();
+	for (auto &node:vec_computer_node)
+		delete node;
+	vec_computer_node.clear();
+}
+
+void Node_info::start_instance()
+{
+	get_local_ip();
+}
+
+void Node_info::get_local_ip()
+{
+	int fd, num;
+	struct ifreq ifq[16];
+	struct ifconf ifc;
+
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if(fd < 0)
+	{
+		syslog(Logger::ERROR, "socket failed");
+		return ;
+	}
+	
+	ifc.ifc_len = sizeof(ifq);
+	ifc.ifc_buf = (caddr_t)ifq;
+	if(ioctl(fd, SIOCGIFCONF, (char *)&ifc))
+	{
+		syslog(Logger::ERROR, "ioctl failed\n");
+		close(fd);
+		return ;
+	}
+	num = ifc.ifc_len / sizeof(struct ifreq);
+	if(ioctl(fd, SIOCGIFADDR, (char *)&ifq[num-1]))
+	{
+		syslog(Logger::ERROR, "ioctl failed\n");
+		close(fd);
+		return ;
+	}
+	close(fd);
+
+	for(int i=0; i<num; i++)
+	{
+		char *tmp_ip = inet_ntoa(((struct sockaddr_in*)(&ifq[i].ifr_addr))-> sin_addr);
+		//syslog(Logger::INFO, "tmp_ip=%s", tmp_ip);
+		//if(strcmp(tmp_ip, "127.0.0.1") != 0)
+		{
+			vec_local_ip.push_back(tmp_ip);
+		}
+	}
+
+	//for(auto &ip: vec_local_ip)
+	//	syslog(Logger::INFO, "vec_local_ip=%s", ip.c_str());
+}
+
+bool Node_info::check_local_ip(std::string &ip)
+{
+	for(auto &local_ip: vec_local_ip)
+		if(ip == local_ip)
+			return true;
+	
+	return false;
+}
+
+void Node_info::get_local_node()
+{
+	if(!node_update_finish)
+	{
+		int meta = get_meta_node();
+		int storage = get_storage_node();
+		int computer = get_computer_node();
+
+		node_update_finish = (meta==0 && storage==0 && computer==0);
+	}
+}
+
+int Node_info::get_meta_node()
+{
+	cJSON *root;
+	cJSON *item;
+	cJSON *sub_item;
+	char *cjson;
+	
+	root = cJSON_CreateObject();
+	cJSON_AddStringToObject(root, "job_type", "get_node");
+	cJSON_AddStringToObject(root, "node_type", "meta_node");
+	int ip_count = 0;
+	for(auto &local_ip: vec_local_ip)
+	{
+		std::string node_ip = "node_ip" + std::to_string(ip_count++);
+		cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
+	}
+	
+	cjson = cJSON_Print(root);
+	cJSON_Delete(root);
+	
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port) + "/para";
+	
+	std::string result_str;
+	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
+	free(cjson);
+	
+	if(ret == 0)
+	{
+		syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		cJSON *ret_root;
+		cJSON *ret_item;
+
+		ret_root = cJSON_Parse(result_str.c_str());
+		if(ret_root == NULL)
+			return -5;
+
+		for (auto &node:vec_meta_node)
+			delete node;
+		vec_meta_node.clear();
+
+		int node_count = 0;
+		while(true)
+		{
+			std::string node_str = "meta_node" + std::to_string(node_count++);
+			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
+			if(item == NULL)
+				break;
+			
+			std::string ip;
+			int port;
+			std::string user;
+			std::string pwd;
+
+			sub_item = cJSON_GetObjectItem(item, "ip");
+			if(sub_item == NULL)
+				break;
+			ip = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "port");
+			if(sub_item == NULL)
+				break;
+			port = sub_item->valueint;
+
+			sub_item = cJSON_GetObjectItem(item, "user");
+			if(sub_item == NULL)
+				break;
+			user = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "pwd");
+			if(sub_item == NULL)
+				break;
+			pwd = sub_item->valuestring;
+
+			Node *node = new Node(ip, port, user, pwd);
+			vec_meta_node.push_back(node);
+		}
+
+	}
+
+	return ret;
+}
+
+int Node_info::get_storage_node()
+{
+	cJSON *root;
+	cJSON *item;
+	cJSON *sub_item;
+	char *cjson;
+	
+	root = cJSON_CreateObject();
+	cJSON_AddStringToObject(root, "job_type", "get_node");
+	cJSON_AddStringToObject(root, "node_type", "storage_node");
+	int ip_count = 0;
+	for(auto &local_ip: vec_local_ip)
+	{
+		std::string node_ip = "node_ip" + std::to_string(ip_count++);
+		cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
+	}
+	
+	cjson = cJSON_Print(root);
+	cJSON_Delete(root);
+	
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port) + "/para";
+	
+	std::string result_str;
+	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
+	free(cjson);
+	
+	if(ret == 0)
+	{
+		syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		cJSON *ret_root;
+		cJSON *ret_item;
+
+		ret_root = cJSON_Parse(result_str.c_str());
+		if(ret_root == NULL)
+			return -5;
+
+		for (auto &node:vec_storage_node)
+			delete node;
+		vec_storage_node.clear();
+
+		int node_count = 0;
+		while(true)
+		{
+			std::string node_str = "storage_node" + std::to_string(node_count++);
+			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
+			if(item == NULL)
+				break;
+		
+			std::string ip;
+			int port;
+			std::string user;
+			std::string pwd;
+
+			sub_item = cJSON_GetObjectItem(item, "ip");
+			if(sub_item == NULL)
+				break;
+			ip = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "port");
+			if(sub_item == NULL)
+				break;
+			port = sub_item->valueint;
+
+			sub_item = cJSON_GetObjectItem(item, "user");
+			if(sub_item == NULL)
+				break;
+			user = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "pwd");
+			if(sub_item == NULL)
+				break;
+			pwd = sub_item->valuestring;
+
+			Node *node = new Node(ip, port, user, pwd);
+			vec_storage_node.push_back(node);
+		}
+	}
+
+	return ret;
+}
+
+int Node_info::get_computer_node()
+{
+	cJSON *root;
+	cJSON *item;
+	cJSON *sub_item;
+	char *cjson;
+	
+	root = cJSON_CreateObject();
+	cJSON_AddStringToObject(root, "job_type", "get_node");
+	cJSON_AddStringToObject(root, "node_type", "computer_node");
+	int ip_count = 0;
+	for(auto &local_ip: vec_local_ip)
+	{
+		std::string node_ip = "node_ip" + std::to_string(ip_count++);
+		cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
+	}
+	
+	cjson = cJSON_Print(root);
+	cJSON_Delete(root);
+	
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port) + "/para";
+	
+	std::string result_str;
+	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
+	free(cjson);
+	
+	if(ret == 0)
+	{
+		syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		cJSON *ret_root;
+		cJSON *ret_item;
+
+		ret_root = cJSON_Parse(result_str.c_str());
+		if(ret_root == NULL)
+			return -5;
+
+		for (auto &node:vec_computer_node)
+			delete node;
+		vec_computer_node.clear();
+
+		int node_count = 0;
+		while(true)
+		{
+			std::string node_str = "computer_node" + std::to_string(node_count++);
+			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
+			if(item == NULL)
+				break;
+		
+			std::string ip;
+			int port;
+			std::string user;
+			std::string pwd;
+
+			sub_item = cJSON_GetObjectItem(item, "ip");
+			if(sub_item == NULL)
+				break;
+			ip = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "port");
+			if(sub_item == NULL)
+				break;
+			port = sub_item->valueint;
+
+			sub_item = cJSON_GetObjectItem(item, "user");
+			if(sub_item == NULL)
+				break;
+			user = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "pwd");
+			if(sub_item == NULL)
+				break;
+			pwd = sub_item->valuestring;
+
+			Node *node = new Node(ip, port, user, pwd);
+			vec_computer_node.push_back(node);
+		}
+	}
+
+	return ret;
+}
+
