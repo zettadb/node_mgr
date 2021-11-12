@@ -54,4 +54,9 @@ cluster_mgr_http_port = 9999
 # cluster_mgr http server ip address
 cluster_mgr_http_ip = 192.168.207.145
 
+# percona install path
+mysql_install_path = ../../percona-8.0.18-bin-rel/dba_tools
+
+# postgresql release path
+pgsql_install_path = ../../postgresql-11.5-rel/scripts
 

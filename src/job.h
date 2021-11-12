@@ -27,6 +27,8 @@ JOB_RECV,
 JOB_DELETE, 
 JOB_PEEK,
 JOB_UPDATE_NODE,
+JOB_SN_CMD,
+JOB_CN_CMD,
 };
 enum File_type {
 FILE_NONE, 
@@ -81,6 +83,9 @@ public:
 	void job_delete(cJSON *root);
 	void job_send(cJSON *root);
 	void job_recv(cJSON *root);
+
+	void job_sn_cmd(cJSON *root);
+	void job_cn_cmd(cJSON *root);
 
 	void add_job(std::string &str);
 	void job_handle(std::string &job);

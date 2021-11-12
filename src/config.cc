@@ -32,6 +32,8 @@ extern std::string http_upload_path;
 
 extern std::string cluster_mgr_http_ip;
 extern int64_t cluster_mgr_http_port;
+extern std::string mysql_install_path;
+extern std::string pgsql_install_path;
 
 Configs *Configs::get_instance()
 {
@@ -207,6 +209,11 @@ void Configs::define_configs()
 		"cluster_mgr_http_port");
 	define_str_config("cluster_mgr_http_ip", cluster_mgr_http_ip, "localhost",
 		"cluster_mgr_http_ip");
+
+	define_str_config("mysql_install_path", mysql_install_path, "../../percona-8.0.18-bin-rel/dba_tools",
+		"mysql_install_path");
+	define_str_config("pgsql_install_path", pgsql_install_path, "../../postgresql-11.5-rel/scripts",
+		"pgsql_install_path");
 
 	/*
 	  There is no practical way we can prevent multiple cluster_mgr processes

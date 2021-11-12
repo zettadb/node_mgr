@@ -45,6 +45,8 @@ int64_t num_http_threads = 3;
 int64_t http_server_port = 1000;
 std::string http_web_path;
 std::string http_upload_path;
+std::string mysql_install_path;
+std::string pgsql_install_path;
 
 Http_server::Http_server():
 	do_exit(0)

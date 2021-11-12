@@ -31,6 +31,8 @@ Job* Job::m_inst = NULL;
 int64_t num_job_threads = 3;
 extern int64_t http_server_port;
 extern std::string http_upload_path;
+extern std::string mysql_install_path;
+extern std::string pgsql_install_path;
 extern int64_t stmt_retries;
 extern int64_t stmt_retry_interval_ms;
 extern "C" void *thread_func_job_work(void*thrdarg);
@@ -84,16 +86,20 @@ void Job::join_all()
 
 bool Job::get_job_type(char     *str, Job_type &job_type)
 {
-	if(strcmp(str, "SEND")==0)
+	if(strcmp(str, "send")==0)
 		job_type = JOB_SEND;
-	else if(strcmp(str, "RECV")==0)
+	else if(strcmp(str, "recv")==0)
 		job_type = JOB_RECV;
-	else if(strcmp(str, "DELETE")==0)
+	else if(strcmp(str, "delete")==0)
 		job_type = JOB_DELETE;
-	else if(strcmp(str, "PEEK")==0)
+	else if(strcmp(str, "peek")==0)
 		job_type = JOB_PEEK;
 	else if(strcmp(str, "update_node")==0)
 		job_type = JOB_UPDATE_NODE;
+	else if(strcmp(str, "sn_cmd")==0)
+		job_type = JOB_SN_CMD;
+	else if(strcmp(str, "cn_cmd")==0)
+		job_type = JOB_CN_CMD;
 	else
 		job_type = JOB_NONE;
 
@@ -102,9 +108,9 @@ bool Job::get_job_type(char     *str, Job_type &job_type)
 
 bool Job::get_file_type(char     *str, File_type &file_type)
 {
-	if(strcmp(str, "TABLE")==0)
+	if(strcmp(str, "table")==0)
 		file_type = FILE_TABLE;
-	else if(strcmp(str, "BINLOG")==0)
+	else if(strcmp(str, "binlog")==0)
 		file_type = FILE_BINLOG;
 	else
 		file_type = FILE_NONE;
@@ -632,6 +638,38 @@ void Job::job_recv(cJSON *root)
 	}
 }
 
+void Job::job_sn_cmd(cJSON *root)
+{
+	cJSON *item;
+	item = cJSON_GetObjectItem(root, "cmd");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get sn cmd error");
+		return;
+	}
+
+	std::string cmd = "cd " + mysql_install_path + ";" 
+						+ item->valuestring;
+	syslog(Logger::INFO, "get cn cmd %s",cmd.c_str());
+	system(cmd.c_str());
+}
+
+void Job::job_cn_cmd(cJSON *root)
+{
+	cJSON *item;
+	item = cJSON_GetObjectItem(root, "cmd");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get cn cmd error");
+		return;
+	}
+
+	std::string cmd = "cd " + pgsql_install_path + ";" 
+						+ item->valuestring;
+	syslog(Logger::INFO, "get cn cmd %s",cmd.c_str());
+	system(cmd.c_str());
+}
+
 void Job::add_job(std::string &str)
 {
 	pthread_mutex_lock(&thread_mtx);
@@ -678,6 +716,14 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_UPDATE_NODE)
 	{
 		Node_info::get_instance()->node_update_finish = false;
+	}
+	else if(job_type == JOB_SN_CMD)
+	{
+		job_sn_cmd(root);
+	}
+	else if(job_type == JOB_CN_CMD)
+	{
+		job_cn_cmd(root);
 	}
 
 	cJSON_Delete(root);
