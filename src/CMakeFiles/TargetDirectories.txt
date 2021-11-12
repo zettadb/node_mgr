@@ -1,7 +1,0 @@
-/home/kunlun/work04/node_mgr/src/CMakeFiles/install/strip.dir
-/home/kunlun/work04/node_mgr/src/CMakeFiles/install/local.dir
-/home/kunlun/work04/node_mgr/src/CMakeFiles/install.dir
-/home/kunlun/work04/node_mgr/src/CMakeFiles/list_install_components.dir
-/home/kunlun/work04/node_mgr/src/CMakeFiles/rebuild_cache.dir
-/home/kunlun/work04/node_mgr/src/CMakeFiles/edit_cache.dir
-/home/kunlun/work04/node_mgr/src/CMakeFiles/node_mgr.dir
