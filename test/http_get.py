@@ -8,6 +8,8 @@ import _thread
 import threading
 import time
 
+#first http get and save to http_get.bin, then every thread get and compare with http_get.bin
+
 def http_get( url ):
 	r = requests.get(url)
 	if r.status_code != requests.codes.ok:

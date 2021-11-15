@@ -18,7 +18,6 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
@@ -394,7 +393,7 @@ void Http_server::Http_server_handle_get_range(int &socket, std::string &path, u
 	}
 
 end:
-	syslog(Logger::INFO, "Http_server_handle_get_range ret=%d", ret);
+	//syslog(Logger::INFO, "Http_server_handle_get_range ret=%d", ret);
 	if(!ret)
 	{
 		send(socket, lpHttpError, strlen(lpHttpError), 0);
@@ -490,7 +489,31 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 	parameters = std::string(cStart, cEnd - cStart);
 
 	syslog(Logger::INFO, "parameters:%s", parameters.c_str());
-	
+
+	////////////////////////////////////////////////////////////////
+	filepath = http_upload_path;
+
+	cJSON *root;
+	cJSON *item;
+
+	root = cJSON_Parse(parameters.c_str());
+	if(root != NULL)
+	{
+		File_type file_type;
+		item = cJSON_GetObjectItem(root, "file_type");
+		if(item != NULL && Job::get_instance()->get_file_type(item->valuestring, file_type))
+		{
+			if(file_type == FILE_MYSQL)
+				filepath = mysql_install_path;
+			else if(file_type == FILE_PGSQL)
+				filepath = pgsql_install_path;
+			else
+				filepath = http_upload_path;
+		}
+
+		cJSON_Delete(root);
+	}
+
 	////////////////////////////////////////////////////////////////
 	cStart = strstr(cEnd, "filename=\"");
 	if(cStart == NULL)
@@ -515,7 +538,6 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 		len += recv(socket, fileStart, BUFSIZE-len, 0);
 
 	////////////////////////////////////////////////////////////////
-	filepath = http_upload_path;
 	if(access(filepath.c_str(), F_OK) != 0)
 	{
 		syslog(Logger::INFO, "need to create path");
@@ -575,7 +597,7 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 	fclose(fp);
 	
 end:
-	syslog(Logger::INFO, "Http_server_handle_post_file ret=%d", ret);
+	//syslog(Logger::INFO, "Http_server_handle_post_file ret=%d", ret);
 	if(ret)
 	{
 		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
@@ -632,7 +654,7 @@ void Http_server::Http_server_accept()
 		if (pollfds[0].revents & POLLIN)
 		{
 			memset(&client_addr, 0, sizeof(client_addr));
-			client_socket = accept4(listenfd, (struct sockaddr *)&client_addr, &len, SOCK_NONBLOCK | SOCK_CLOEXEC);
+			client_socket = accept(listenfd, (struct sockaddr *)&client_addr, &len);
 			
 			if (client_socket <= 0)
 			{

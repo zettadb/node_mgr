@@ -34,12 +34,13 @@ public:
 	}
 	bool Http_client_parse_url(const char *url, char *ip, int *port, char *path);
 	bool Http_client_content_length(const char* buf, int *length);
+	bool Http_client_get_filename(const char* filepath, std::string &filename_str);
 	int Http_client_socket(const char *ip, int port);
 	int Http_client_get(const char *url);
 	int Http_client_get_file(const char *url, const char *filename, int *pos);
 	int Http_client_get_file_range(const char *url, const char *filename, int *pos, int begin, int end);
 	int Http_client_post_para(const char *url, const char *post_str, std::string &result_str);
-	int Http_client_post_file(const char *url, const char *post_str, const char *filename, const char *filepath);
+	int Http_client_post_file(const char *url, const char *post_str, const char *filepath, std::string &result_str);
 };
 
 #endif // !HTTP_CLIENT_H

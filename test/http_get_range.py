@@ -8,6 +8,7 @@ import _thread
 import threading
 import time
 
+#first http get and save to http_get_range.bin, then every thread get range and compare with http_get_range.bin
 			
 def http_get_range( url, step ):
 	start_len = 0

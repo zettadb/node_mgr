@@ -13,8 +13,6 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
@@ -139,6 +137,25 @@ bool Http_client::Http_client_content_length(const char* buf, int *length)
 		return false;
 
 	return true;
+}
+
+bool Http_client::Http_client_get_filename(const char* filepath, std::string &filename_str)
+{
+	char *cStart, *cEnd;
+
+	cStart = (char*)filepath;
+	while(true){
+		cEnd = strchr(cStart, '/');
+		if(cEnd == NULL)
+			break;
+		cStart = cEnd+1;
+	};
+
+	filename_str = std::string(cStart, strlen(filepath) - (cStart-filepath));
+	if(filename_str.length()>0)
+		return true;
+	else
+		return false;
 }
 
 int Http_client::Http_client_socket(const char *ip, int port)
@@ -525,8 +542,8 @@ int Http_client::Http_client_post_para(const char *url, const char *post_str, st
  * @param
  * url : http post
  * post_str : post parameter
- * filename : filename for upload as parameter
  * filepath : filepath for upload 
+ * result_str : return parameter
  *
  * @retval 
  *	0 : success
@@ -537,7 +554,7 @@ int Http_client::Http_client_post_para(const char *url, const char *post_str, st
  *  -5 : upload file open fail
  *  -6 : http return error
  */
-int Http_client::Http_client_post_file(const char *url, const char *post_str, const char *filename, const char *filepath)
+int Http_client::Http_client_post_file(const char *url, const char *post_str, const char *filepath, std::string &result_str)
 {
 	//syslog(Logger::INFO, "Http_client_post_file: %s,%s,%s,%s", url, post_str, filename, filepath);
 	
@@ -558,20 +575,24 @@ int Http_client::Http_client_post_file(const char *url, const char *post_str, co
 	if(res == 0)
 	{
 		filelen = buf.st_size;
-		syslog(Logger::INFO, "file len = %d", filelen);
+		syslog(Logger::INFO, "file len = %ld", filelen);
 	}
 	else
 	{
 		syslog(Logger::ERROR, "file no find!");
 		return -4;
 	}
+
+	//////////////////////////////////////////////////////////////////////
+	std::string filename;
+	Http_client_get_filename(filepath, filename);
 	
 	//////////////////////////////////////////////////////////////////////
 	//get content len
-	contentlen = snprintf(http_buf, BUFSIZE, HTTP_POST_FILE_STR2, post_str, filename);
+	contentlen = snprintf(http_buf, BUFSIZE, HTTP_POST_FILE_STR2, post_str, filename.c_str());
 	contentlen += filelen;
 	contentlen += strlen(HTTP_POST_FILE_STR3);
-	syslog(Logger::INFO, "contentlen = %d", contentlen);
+	syslog(Logger::INFO, "contentlen = %ld", contentlen);
 
 	//////////////////////////////////////////////////////////////////////
 	if(!Http_client_parse_url(url, ip, &port, path))
@@ -581,7 +602,7 @@ int Http_client::Http_client_post_file(const char *url, const char *post_str, co
 	}
 	
 	int n = snprintf(http_buf, sizeof(http_buf), HTTP_POST_FILE_STR1, path, ip, port, contentlen);
-	n += snprintf(http_buf+n, sizeof(http_buf), HTTP_POST_FILE_STR2, post_str, filename);
+	n += snprintf(http_buf+n, sizeof(http_buf), HTTP_POST_FILE_STR2, post_str, filename.c_str());
 	if(n >= sizeof(http_buf)-1)
 	{
 		syslog(Logger::ERROR, "post_str %s is to long", post_str);
@@ -601,7 +622,7 @@ int Http_client::Http_client_post_file(const char *url, const char *post_str, co
 	FILE *fp = fopen(filepath, "rb");
 	if (fp == NULL)
 	{
-		syslog(Logger::ERROR, "open file %s error", filename);
+		syslog(Logger::ERROR, "open file %s error", filepath);
 		close(socket_fd);
 		return -5;
 	}
@@ -627,17 +648,33 @@ int Http_client::Http_client_post_file(const char *url, const char *post_str, co
 
 	send(socket_fd, HTTP_POST_FILE_STR3, strlen(HTTP_POST_FILE_STR3), 0);
 
-	ret = -6;
-	do{
-		n = recv(socket_fd, http_buf, sizeof(http_buf)-1, 0);
-		if(n>0)
+	n = recv(socket_fd, http_buf, sizeof(http_buf)-1, 0);
+	if(n>0)
+	{
+		http_buf[n] = '\0';
+		if(strstr((char*)http_buf, "200 OK") == NULL)
 		{
-			http_buf[n] = '\0';
-			syslog(Logger::INFO, "http post file back: %s", http_buf);
-			if(strstr((char*)http_buf, "200 OK") != NULL)
-				ret = 0;
+			syslog(Logger::ERROR, "http return code error");
+			ret = -6;
 		}
-	}while(n>0);
+		else
+		{
+			int content_length = 0;
+			if(!Http_client_content_length(http_buf, &content_length))
+			{
+				syslog(Logger::ERROR, "get content length fail");
+				ret = -6;
+			}
+			else
+			{
+				char *result_start = strstr((char*)http_buf, "\r\n\r\n");
+				if(result_start == NULL)
+					ret = -6;
+				else
+					result_str = std::string(result_start+4, content_length);
+			}
+		}
+	}
 
 	close(socket_fd);
 

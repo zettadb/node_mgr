@@ -34,6 +34,8 @@ enum File_type {
 FILE_NONE, 
 FILE_TABLE, 
 FILE_BINLOG,
+FILE_MYSQL,
+FILE_PGSQL,
 };
 
 class Job

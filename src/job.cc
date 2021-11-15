@@ -84,7 +84,7 @@ void Job::join_all()
 	}
 }
 
-bool Job::get_job_type(char     *str, Job_type &job_type)
+bool Job::get_job_type(char *str, Job_type &job_type)
 {
 	if(strcmp(str, "send")==0)
 		job_type = JOB_SEND;
@@ -106,12 +106,16 @@ bool Job::get_job_type(char     *str, Job_type &job_type)
 	return true;
 }
 
-bool Job::get_file_type(char     *str, File_type &file_type)
+bool Job::get_file_type(char *str, File_type &file_type)
 {
 	if(strcmp(str, "table")==0)
 		file_type = FILE_TABLE;
 	else if(strcmp(str, "binlog")==0)
 		file_type = FILE_BINLOG;
+	else if(strcmp(str, "mysql")==0)
+		file_type = FILE_MYSQL;
+	else if(strcmp(str, "pgsql")==0)
+		file_type = FILE_PGSQL;
 	else
 		file_type = FILE_NONE;
 
