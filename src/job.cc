@@ -100,8 +100,15 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_SN_CMD;
 	else if(strcmp(str, "cn_cmd")==0)
 		job_type = JOB_CN_CMD;
+	else if(strcmp(str, "get_node")==0)
+		job_type = JOB_GET_NODE;
+	else if(strcmp(str, "get_info")==0)
+		job_type = JOB_GET_INFO;
 	else
+	{
 		job_type = JOB_NONE;
+		return false;
+	}
 
 	return true;
 }
@@ -156,6 +163,7 @@ bool Job::get_table_path(std::string &ip, int port, std::string &user, std::stri
 
 		break;
 	}
+	mysql_conn.free_mysql_result();
 	mysql_conn.close_conn();
 
 	if(retry<0)
@@ -208,6 +216,7 @@ bool Job::get_binlog_path(std::string &ip, int port, std::string &user, std::str
 
 		break;
 	}
+	mysql_conn.free_mysql_result();
 	mysql_conn.close_conn();
 
 	if(retry<0)
@@ -241,6 +250,7 @@ bool Job::delete_db_table(std::string &ip, int port, std::string &user, std::str
 
 		break;
 	}
+	mysql_conn.free_mysql_result();
 	mysql_conn.close_conn();
 	
 	if(retry<0)
@@ -500,7 +510,7 @@ void Job::job_send(cJSON *root)
 		add_file_path(id, tb_path);
 
 		std::string tb_name = tb + ".ibd";
-		std::string post_url = "http://" + remote_ip + ":" + std::to_string(http_server_port) + "/para";
+		std::string post_url = "http://" + remote_ip + ":" + std::to_string(http_server_port);
 		syslog(Logger::INFO, "post_url %s", post_url.c_str());
 
 		cJSON_DeleteItemFromObject(root, "job_type");

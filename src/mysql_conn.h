@@ -20,6 +20,7 @@ class MYSQL_CONN
 {
 public:
 	MYSQL_RES *result;
+	void free_mysql_result();
 private:
     bool connected;
 	enum_sql_command sqlcmd;
@@ -27,7 +28,6 @@ private:
 	bool mysql_get_next_result();
 	int handle_mysql_error(const char *stmt_ptr = NULL, size_t stmt_len = 0);
 	bool handle_mysql_result();
-	void free_mysql_result();
 public:
 	MYSQL_CONN()
 	{

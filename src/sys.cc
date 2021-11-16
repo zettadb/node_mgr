@@ -9,12 +9,24 @@
 #include "global.h"
 #include "sys.h"
 #include "log.h"
+#include "job.h"
+#include "node_info.h"
 #include "config.h"
 #include "thread_manager.h"
 #include "http_server.h"
 #include "http_client.h"
 #include "node_info.h"
 #include <utility>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <sys/file.h>
+#include <sys/un.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+
 
 System *System::m_global_instance = NULL;
 extern std::string log_file_path;
@@ -77,4 +89,364 @@ end:
 	return ret;
 }
 
+bool System::http_para_cmd(const std::string &para, std::string &str_ret)
+{
+	bool ret = false;
+	cJSON *root;
+	cJSON *item;
+	Job_type job_type;
+
+	root = cJSON_Parse(para.c_str());
+	if(root == NULL)
+	{
+		syslog(Logger::ERROR, "cJSON_Parse error");	
+		goto end;
+	}
+
+	item = cJSON_GetObjectItem(root, "job_type");
+
+	if(item == NULL || !Job::get_instance()->get_job_type(item->valuestring, job_type))
+	{
+		syslog(Logger::ERROR, "get_job_type error");
+		goto end;
+	}
+
+	if(job_type == JOB_GET_NODE)
+	{
+		ret = get_node_instance(root, str_ret);
+	}
+	else if(job_type == JOB_GET_INFO)
+	{
+		
+		ret = true;
+	}
+
+end:
+	if(root != NULL)
+		cJSON_Delete(root);
+
+	return ret;
+}
+
+bool System::get_node_instance(cJSON *root, std::string &str_ret)
+{
+	Scopped_mutex sm(mtx);
+	
+	bool ret = false;
+	int node_count = 0;
+	cJSON *item;
+	std::string disk_used, disk_free;
+	
+	item = cJSON_GetObjectItem(root, "node_type");
+	if(item == NULL)
+	{
+		cJSON *ret_root;
+		cJSON *ret_item;
+		char *ret_cjson;
+		ret_root = cJSON_CreateObject();
+		
+		//meta node
+		node_count = 0;
+		for(auto &node: Node_info::get_instance()->vec_meta_node)
+		{
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			str = "meta_node" + std::to_string(node_count++);
+			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "ip", node->ip.c_str());
+			cJSON_AddNumberToObject(ret_item, "port", node->port);
+			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
+			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
+			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			if(get_disk_size(node->path, disk_used, disk_free))
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
+				cJSON_AddStringToObject(ret_item, "disk_free", disk_free.c_str());
+			}
+			else
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", "error");
+				cJSON_AddStringToObject(ret_item, "disk_free", "error");
+			}
+		}
+
+		//storage node
+		node_count = 0;
+		for(auto &node: Node_info::get_instance()->vec_storage_node)
+		{
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			str = "storage_node" + std::to_string(node_count++);
+			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "ip", node->ip.c_str());
+			cJSON_AddNumberToObject(ret_item, "port", node->port);
+			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
+			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
+			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			if(get_disk_size(node->path, disk_used, disk_free))
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
+				cJSON_AddStringToObject(ret_item, "disk_free", disk_free.c_str());
+			}
+			else
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", "error");
+				cJSON_AddStringToObject(ret_item, "disk_free", "error");
+			}
+		}
+
+		//computer node
+		node_count = 0;
+		for(auto &node: Node_info::get_instance()->vec_computer_node)
+		{
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			str = "computer_node" + std::to_string(node_count++);
+			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "ip", node->ip.c_str());
+			cJSON_AddNumberToObject(ret_item, "port", node->port);
+			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
+			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
+			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			if(get_disk_size(node->path, disk_used, disk_free))
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
+				cJSON_AddStringToObject(ret_item, "disk_free", disk_free.c_str());
+			}
+			else
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", "error");
+				cJSON_AddStringToObject(ret_item, "disk_free", "error");
+			}
+		}
+
+		ret_cjson = cJSON_Print(ret_root);
+		str_ret = ret_cjson;
+
+		if(ret_root != NULL)
+			cJSON_Delete(ret_root);
+		if(ret_cjson != NULL)
+			free(ret_cjson);
+	
+		return true;
+	}
+
+	if(strcmp(item->valuestring, "meta_node") == 0)
+	{
+		cJSON *ret_root;
+		cJSON *ret_item;
+		char *ret_cjson;
+		ret_root = cJSON_CreateObject();
+		
+		for(auto &node: Node_info::get_instance()->vec_meta_node)
+		{
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			str = "meta_node" + std::to_string(node_count++);
+			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "ip", node->ip.c_str());
+			cJSON_AddNumberToObject(ret_item, "port", node->port);
+			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
+			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
+			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			if(get_disk_size(node->path, disk_used, disk_free))
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
+				cJSON_AddStringToObject(ret_item, "disk_free", disk_free.c_str());
+			}
+			else
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", "error");
+				cJSON_AddStringToObject(ret_item, "disk_free", "error");
+			}
+		}
+
+		ret_cjson = cJSON_Print(ret_root);
+		str_ret = ret_cjson;
+
+		if(ret_root != NULL)
+			cJSON_Delete(ret_root);
+		if(ret_cjson != NULL)
+			free(ret_cjson);
+
+		ret = true;
+	}
+	else if(strcmp(item->valuestring, "storage_node") == 0)
+	{
+		cJSON *ret_root;
+		cJSON *ret_item;
+		char *ret_cjson;
+		ret_root = cJSON_CreateObject();
+
+		for(auto &node: Node_info::get_instance()->vec_storage_node)
+		{
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			str = "storage_node" + std::to_string(node_count++);
+			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "ip", node->ip.c_str());
+			cJSON_AddNumberToObject(ret_item, "port", node->port);
+			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
+			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
+			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			if(get_disk_size(node->path, disk_used, disk_free))
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
+				cJSON_AddStringToObject(ret_item, "disk_free", disk_free.c_str());
+			}
+			else
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", "error");
+				cJSON_AddStringToObject(ret_item, "disk_free", "error");
+			}
+		}
+
+		ret_cjson = cJSON_Print(ret_root);
+		str_ret = ret_cjson;
+
+		if(ret_root != NULL)
+			cJSON_Delete(ret_root);
+		if(ret_cjson != NULL)
+			free(ret_cjson);
+
+		ret = true;
+	}
+	else if(strcmp(item->valuestring, "computer_node") == 0)
+	{
+		cJSON *ret_root;
+		cJSON *ret_item;
+		char *ret_cjson;
+		ret_root = cJSON_CreateObject();
+
+		for(auto &node: Node_info::get_instance()->vec_computer_node)
+		{
+			std::string str;
+			ret_item = cJSON_CreateObject();
+			str = "computer_node" + std::to_string(node_count++);
+			cJSON_AddItemToObject(ret_root, str.c_str(), ret_item);
+			
+			cJSON_AddStringToObject(ret_item, "ip", node->ip.c_str());
+			cJSON_AddNumberToObject(ret_item, "port", node->port);
+			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
+			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
+			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			if(get_disk_size(node->path, disk_used, disk_free))
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
+				cJSON_AddStringToObject(ret_item, "disk_free", disk_free.c_str());
+			}
+			else
+			{
+				cJSON_AddStringToObject(ret_item, "disk_used", "error");
+				cJSON_AddStringToObject(ret_item, "disk_free", "error");
+			}
+		}
+
+		ret_cjson = cJSON_Print(ret_root);
+		str_ret = ret_cjson;
+
+		if(ret_root != NULL)
+			cJSON_Delete(ret_root);
+		if(ret_cjson != NULL)
+			free(ret_cjson);
+
+		ret = true;
+	}
+	
+	return ret;
+}
+
+bool System::get_disk_size(std::string &path, std::string &used, std::string &free)
+{
+	bool ret = false;
+	FILE* pfd;
+
+	char *p, *q;
+	char buf[256];
+	std::string str_cmd;
+
+	str_cmd = "du -h --max-depth=0 " + path;
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	p = strchr(buf, 0x09);	//asii ht
+	if(p != NULL)
+		*p = '\0';
+	else
+	{
+		char* p = strchr(buf, 0x20);	//space
+		if(p != NULL)
+			*p = '\0';
+		else
+			goto end;
+	}
+
+	used = buf;
+		
+	pclose(pfd);
+	pfd = NULL;
+
+	str_cmd = "df -h " + path;
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
+	//first line
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	//second line
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+	
+	//first space
+	p = strchr(buf, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+	
+	//second space
+	p = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+
+	//third space
+	p = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+
+	//fourth space
+	q = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	*q = '\0';
+
+	free = p;
+
+	ret = true;
+
+end:
+	if(pfd != NULL)
+		pclose(pfd);
+
+	return ret;
+}
 

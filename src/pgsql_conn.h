@@ -15,11 +15,12 @@
 
 class PGSQL_CONN
 {
+public:
+	PGresult   *result;
+	void free_pgsql_result();
 private:
 	bool connected;
 	PGconn	   *conn;
-	PGresult   *result;
-	void free_pgsql_result();
 public:
 	PGSQL_CONN()
 	{

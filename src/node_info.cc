@@ -8,7 +8,10 @@
 #include "global.h"
 #include "log.h"
 #include "cjson.h"
+#include "job.h"
 #include "node_info.h"
+#include "mysql_conn.h"
+#include "pgsql_conn.h"
 #include "http_client.h"
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -145,7 +148,7 @@ int Node_info::get_meta_node()
 	cjson = cJSON_Print(root);
 	cJSON_Delete(root);
 	
-	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port) + "/para";
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
 	
 	std::string result_str;
 	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
@@ -153,7 +156,7 @@ int Node_info::get_meta_node()
 	
 	if(ret == 0)
 	{
-		syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		//syslog(Logger::INFO, "result_str=%s", result_str.c_str());
 		cJSON *ret_root;
 		cJSON *ret_item;
 
@@ -204,6 +207,41 @@ int Node_info::get_meta_node()
 
 	}
 
+	//get the path of meta node
+	for (auto &node:vec_meta_node)
+	{
+		int retry = stmt_retries;
+		MYSQL_CONN mysql_conn;
+		
+		while(retry--)
+		{
+			if(mysql_conn.connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			{
+				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
+								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+				continue;
+			}
+		
+			if(mysql_conn.send_stmt(SQLCOM_SELECT, "select @@datadir"))
+				continue;
+		
+			MYSQL_ROW row;
+			if ((row = mysql_fetch_row(mysql_conn.result)))
+			{
+				//syslog(Logger::INFO, "row[]=%s",row[0]);
+				node->path = row[0];
+			}
+			else
+			{
+				continue;
+			}
+		
+			break;
+		}
+		mysql_conn.free_mysql_result();
+		mysql_conn.close_conn();
+	}
+
 	return ret;
 }
 
@@ -227,7 +265,7 @@ int Node_info::get_storage_node()
 	cjson = cJSON_Print(root);
 	cJSON_Delete(root);
 	
-	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port) + "/para";
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
 	
 	std::string result_str;
 	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
@@ -235,7 +273,7 @@ int Node_info::get_storage_node()
 	
 	if(ret == 0)
 	{
-		syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		//syslog(Logger::INFO, "result_str=%s", result_str.c_str());
 		cJSON *ret_root;
 		cJSON *ret_item;
 
@@ -285,6 +323,41 @@ int Node_info::get_storage_node()
 		}
 	}
 
+	//get the path of storage node
+	for (auto &node:vec_storage_node)
+	{
+		int retry = stmt_retries;
+		MYSQL_CONN mysql_conn;
+		
+		while(retry--)
+		{
+			if(mysql_conn.connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			{
+				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
+								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+				continue;
+			}
+		
+			if(mysql_conn.send_stmt(SQLCOM_SELECT, "select @@datadir"))
+				continue;
+		
+			MYSQL_ROW row;
+			if ((row = mysql_fetch_row(mysql_conn.result)))
+			{
+				//syslog(Logger::INFO, "row[]=%s",row[0]);
+				node->path = row[0];
+			}
+			else
+			{
+				continue;
+			}
+		
+			break;
+		}
+		mysql_conn.free_mysql_result();
+		mysql_conn.close_conn();
+	}
+
 	return ret;
 }
 
@@ -308,7 +381,7 @@ int Node_info::get_computer_node()
 	cjson = cJSON_Print(root);
 	cJSON_Delete(root);
 	
-	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port) + "/para";
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
 	
 	std::string result_str;
 	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
@@ -316,7 +389,7 @@ int Node_info::get_computer_node()
 	
 	if(ret == 0)
 	{
-		syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		//syslog(Logger::INFO, "result_str=%s", result_str.c_str());
 		cJSON *ret_root;
 		cJSON *ret_item;
 
@@ -364,6 +437,36 @@ int Node_info::get_computer_node()
 			Node *node = new Node(ip, port, user, pwd);
 			vec_computer_node.push_back(node);
 		}
+	}
+
+	//get the path of computer node
+	for (auto &node:vec_computer_node)
+	{
+		int retry = stmt_retries;
+		PGSQL_CONN pgsql_conn;
+		
+		while(retry--)
+		{
+			if(pgsql_conn.connect("postgres", node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			{
+				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
+								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+				continue;
+			}
+		
+			if(pgsql_conn.send_stmt(PG_COPYRES_TUPLES, "SELECT setting FROM pg_settings WHERE name='data_directory'"))
+				continue;
+
+			if(PQntuples(pgsql_conn.result) == 1)
+			{
+				//syslog(Logger::INFO, "presult = %s", PQgetvalue(pgsql_conn.result,0,0));
+				node->path = PQgetvalue(pgsql_conn.result,0,0);
+			}
+			
+			break;
+		}
+		pgsql_conn.free_pgsql_result();
+		pgsql_conn.close_conn();
 	}
 
 	return ret;

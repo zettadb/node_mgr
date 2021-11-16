@@ -10,6 +10,7 @@
 #include "log.h"
 #include "sys.h"
 #include "job.h"
+#include "node_info.h"
 #include "http_server.h"
 #include <signal.h>
 #include <poll.h>
@@ -421,10 +422,24 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 
 	//add to job
 	syslog(Logger::INFO, "Http_server_handle_post_para:%s", para.c_str());
-	Job::get_instance()->add_job(para);
 
-	int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
-	send(socket, buf, n, 0);
+	//get para type
+	std::string str_ret;
+	bool ret = System::get_instance()->http_para_cmd(para, str_ret);
+	
+	if(ret)
+	{
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpJspOk, str_ret.length());
+		send(socket, buf, n, 0);
+		send(socket, str_ret.c_str(), str_ret.length(), 0);
+	}
+	else
+	{
+		Job::get_instance()->add_job(para);
+
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		send(socket, buf, n, 0);
+	}
 }
 
 void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)

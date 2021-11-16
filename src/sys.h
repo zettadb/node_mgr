@@ -51,5 +51,9 @@ public:
 		Scopped_mutex sm(mtx);
 		return config_path;
 	}
+
+	bool http_para_cmd(const std::string &para, std::string &str_ret);
+	bool get_node_instance(cJSON *root, std::string &str_ret);
+	bool get_disk_size(std::string &path, std::string &used, std::string &free);
 };
 #endif // !SYS_H

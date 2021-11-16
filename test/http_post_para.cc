@@ -202,7 +202,16 @@ int Http_client_post_para(const char *url, const char *post_str, std::string &re
 				if(result_start == NULL)
 					ret = -4;
 				else
-					result_str = std::string(result_start+4, content_length);
+				{
+					int len = n-(result_start+4-http_buf);
+					result_str = std::string(result_start+4, len);
+					while(len < content_length)
+					{
+						n = recv(socket_fd, http_buf, sizeof(http_buf)-1, 0);
+						len += n;
+						result_str += std::string(http_buf, n);
+					}
+				}
 			}
 		}
 	}
