@@ -83,6 +83,12 @@ int System::create_instance(const std::string&cfg_path)
 		http_inst->start_http_thread();
 		
 		Http_client::get_instance();
+
+		std::string cpu;
+		m_global_instance->get_cpu_used(cpu);
+
+		std::string used,free;
+		m_global_instance->get_mem_used(used, free);
 	}
 	
 end:
@@ -117,8 +123,7 @@ bool System::http_para_cmd(const std::string &para, std::string &str_ret)
 	}
 	else if(job_type == JOB_GET_INFO)
 	{
-		
-		ret = true;
+		ret = get_node_info(root, str_ret);
 	}
 
 end:
@@ -361,6 +366,46 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret)
 	return ret;
 }
 
+bool System::get_node_info(cJSON *root, std::string &str_ret)
+{
+	cJSON *ret_root;
+	cJSON *ret_item;
+	char *ret_cjson;
+	ret_root = cJSON_CreateObject();
+
+	std::string str1,str2;
+	if(get_cpu_used(str1))
+	{
+		cJSON_AddStringToObject(ret_root, "cpu_used", str1.c_str());
+	}
+	if(get_mem_used(str1,str2))
+	{
+		cJSON_AddStringToObject(ret_root, "mem_used", str1.c_str());
+		cJSON_AddStringToObject(ret_root, "mem_free", str2.c_str());
+	}
+	std::string path;
+	get_user_path(path);
+	if(get_disk_size(path, str1,str2))
+	{
+		cJSON_AddStringToObject(ret_root, "disk_used", str1.c_str());
+		cJSON_AddStringToObject(ret_root, "disk_free", str2.c_str());
+	}
+
+	cJSON_AddNumberToObject(ret_root, "meta_node", Node_info::get_instance()->vec_meta_node.size());
+	cJSON_AddNumberToObject(ret_root, "storage_node", Node_info::get_instance()->vec_storage_node.size());
+	cJSON_AddNumberToObject(ret_root, "computer_node", Node_info::get_instance()->vec_computer_node.size());
+	
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+	
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
 bool System::get_disk_size(std::string &path, std::string &used, std::string &free)
 {
 	bool ret = false;
@@ -443,6 +488,145 @@ bool System::get_disk_size(std::string &path, std::string &used, std::string &fr
 
 	ret = true;
 
+end:
+	if(pfd != NULL)
+		pclose(pfd);
+
+	return ret;
+}
+
+bool System::get_cpu_used(std::string &cpu_used)
+{
+	bool ret = false;
+	FILE* pfd;
+
+	char *p, *q;
+	char buf[256];
+	float fcpu_use;
+
+	pfd = popen("top -bn 1 -i -c | grep %Cpu", "r");
+	if(!pfd)
+		goto end;
+
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	p = strstr(buf, "ni,");
+	if(p == NULL)
+		goto end;
+
+	p = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+
+	q = strchr(p, 0x20);
+	if(q == NULL)
+		goto end;
+
+	cpu_used = std::string(p, q - p);
+
+	fcpu_use = atof(cpu_used.c_str());
+	fcpu_use = 100 - fcpu_use;
+	if(fcpu_use - 5 > 0)	// for top cmd use 5%
+		fcpu_use = fcpu_use - 5;
+
+	cpu_used = std::to_string(fcpu_use);
+	cpu_used = cpu_used.substr(0, cpu_used.find(".")+3)+"%";
+
+	ret = true;
+end:
+	if(pfd != NULL)
+		pclose(pfd);
+
+	return ret;
+}
+
+bool System::get_mem_used(std::string &used, std::string &free)
+{
+	bool ret = false;
+	FILE* pfd;
+
+	char *p, *q;
+	char buf[256];
+	int men_use;
+	int men_free;
+
+	pfd = popen("free -m | grep Mem", "r");
+	if(!pfd)
+		goto end;
+
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	p = strstr(buf, "Mem:");
+	if(p == NULL)
+		goto end;
+
+	p = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+
+	q = strchr(p, 0x20);
+	if(q == NULL)
+		goto end;
+
+	free = std::string(p, q - p);
+	men_free = atoi(free.c_str());
+
+	p = q;
+	while(*p == 0x20)
+		p++;
+
+	q = strchr(p, 0x20);
+	if(q == NULL)
+		goto end;
+
+	used = std::string(p, q - p);
+	men_use = atoi(used.c_str());
+
+	men_free = men_free - men_use;
+
+	used = std::to_string(men_use)+"M";
+	free = std::to_string(men_free)+"M";
+
+	ret = true;
+end:
+	if(pfd != NULL)
+		pclose(pfd);
+
+	return ret;
+}
+
+bool System::get_user_path(std::string &path)
+{
+	bool ret = false;
+	FILE* pfd;
+
+	char *p;
+	char buf[256];
+
+	path = "/home";
+
+	pfd = popen("who am i", "r");
+	if(!pfd)
+		goto end;
+
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+	
+	p = strchr(buf, 0x20);
+	if(p == NULL)
+		goto end;
+
+	path = "/home/" + std::string(buf, p-buf);
+
+	ret = true;
 end:
 	if(pfd != NULL)
 		pclose(pfd);

@@ -54,6 +54,10 @@ public:
 
 	bool http_para_cmd(const std::string &para, std::string &str_ret);
 	bool get_node_instance(cJSON *root, std::string &str_ret);
+	bool get_node_info(cJSON *root, std::string &str_ret);
 	bool get_disk_size(std::string &path, std::string &used, std::string &free);
+	bool get_cpu_used(std::string &cpu_used);
+	bool get_mem_used(std::string &used, std::string &free);
+	bool get_user_path(std::string &path);
 };
 #endif // !SYS_H
