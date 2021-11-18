@@ -39,7 +39,7 @@ configure_file(sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
 		"${PROJECT_BINARY_DIR}"
 		"${PROJECT_SOURCE_DIR}/../include")
-target_link_libraries(node_mgr mariadb pthread pq hdfs jvm)
+target_link_libraries(node_mgr mariadb pthread pq)
 
 install(TARGETS node_mgr DESTINATION bin)
 install(DIRECTORY ../lib/ DESTINATION lib)

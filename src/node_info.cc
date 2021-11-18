@@ -320,6 +320,16 @@ int Node_info::get_storage_node()
 
 			Node *node = new Node(ip, port, user, pwd);
 			vec_storage_node.push_back(node);
+
+			sub_item = cJSON_GetObjectItem(item, "cluster");
+			if(sub_item == NULL)
+				break;
+			node->cluster = sub_item->valuestring;
+
+			sub_item = cJSON_GetObjectItem(item, "shard");
+			if(sub_item == NULL)
+				break;
+			node->shard = sub_item->valuestring;
 		}
 	}
 
@@ -436,6 +446,11 @@ int Node_info::get_computer_node()
 
 			Node *node = new Node(ip, port, user, pwd);
 			vec_computer_node.push_back(node);
+
+			sub_item = cJSON_GetObjectItem(item, "cluster");
+			if(sub_item == NULL)
+				break;
+			node->cluster = sub_item->valuestring;
 		}
 	}
 

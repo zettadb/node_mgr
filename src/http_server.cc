@@ -307,24 +307,35 @@ void Http_server::Http_server_handle_get(int &socket, std::string &path)
 	if(res == 0)
 	{
 		char http_buf[BUFSIZE];
-		uint64_t len = buf.st_size;
+		uint64_t filelen = buf.st_size;
 		uint64_t n;
 
 		if(html_file)
-			n = snprintf(http_buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpHtmlOk, len);
+			n = snprintf(http_buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpHtmlOk, filelen);
 		else
-			n = snprintf(http_buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpBinOk, len);
+			n = snprintf(http_buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpBinOk, filelen);
 		
 		send(socket, http_buf, n, 0);
 
 		FILE *fp = fopen(strpath.c_str(), "rb");
 		if (fp != NULL)
 		{
-			while(len>0)
+			while(filelen>0 && !Http_server::do_exit)
 			{
-				n = fread(http_buf, 1, BUFSIZE, fp);
-				send(socket, http_buf, n, 0);
-				len -= n;
+				int rlen = fread(http_buf, 1, BUFSIZE, fp);
+				int wlen = send(socket, http_buf, rlen, 0);
+				int wtotal = wlen;
+
+				while(wlen>=0 && wtotal<rlen && !Http_server::do_exit)
+				{
+					usleep(1000);
+					wlen = send(socket, http_buf+wtotal, rlen-wtotal, 0);
+					wtotal += wlen;
+				}
+				filelen -= wtotal;
+
+				if(wlen<0)
+					break;
 			}
 			fclose(fp);
 		}
@@ -377,15 +388,30 @@ void Http_server::Http_server_handle_get_range(int &socket, std::string &path, u
 		if (fp != NULL)
 		{
 			fseek(fp, begin, SEEK_SET);
-			while(need_to_send>0)
+			while(need_to_send>0 && !Http_server::do_exit)
 			{
-				if(need_to_send>BUFSIZE)
-					n = fread(http_buf, 1, BUFSIZE, fp);
-				else
-					n = fread(http_buf, 1, need_to_send, fp);
+				int rlen;
+				int wlen;
+				int wtotal;
 				
-				send(socket, http_buf, n, 0);
-				need_to_send -= n;
+				if(need_to_send>BUFSIZE)
+					rlen = fread(http_buf, 1, BUFSIZE, fp);
+				else
+					rlen = fread(http_buf, 1, need_to_send, fp);
+				
+				wlen = send(socket, http_buf, rlen, 0);
+				wtotal = wlen;
+
+				while(wlen>=0 && wtotal<rlen && !Http_server::do_exit)
+				{
+					usleep(1000);
+					wlen = send(socket, http_buf+wtotal, rlen-wtotal, 0);
+					wtotal += wlen;
+				}
+				need_to_send -= wtotal;
+
+				if(wlen<0)
+					break;
 			}
 			fclose(fp);
 		}
@@ -466,7 +492,7 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 	if(content_length <= 0)
 		goto end;
 
-	syslog(Logger::INFO, "content_length:%d", content_length);
+	//syslog(Logger::INFO, "content_length:%d", content_length);
 
 	////////////////////////////////////////////////////////////////
 	cStart = strstr((char*)buf, "boundary=");
@@ -480,7 +506,7 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 
 	boundary = std::string(cStart, cEnd - cStart);
 
-	syslog(Logger::INFO, "boundary:%s", boundary.c_str());
+	//syslog(Logger::INFO, "boundary:%s", boundary.c_str());
 	
 	////////////////////////////////////////////////////////////////
 	contentStart = strstr(cEnd, "\r\n\r\n");
@@ -541,7 +567,7 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 
 	filename = std::string(cStart, cEnd - cStart);
 
-	syslog(Logger::INFO, "filename:%s", filename.c_str());
+	//syslog(Logger::INFO, "filename:%s", filename.c_str());
 
 	////////////////////////////////////////////////////////////////
 	fileStart = strstr(cEnd, "\r\n\r\n");

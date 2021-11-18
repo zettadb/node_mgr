@@ -24,6 +24,8 @@ public:
 	std::string user;
 	std::string pwd;
 	std::string path;
+	std::string cluster;
+	std::string shard;
 	Node(std::string &ip_, int port_, std::string &user_, std::string &pwd_):
 		ip(ip_),port(port_),user(user_),pwd(pwd_){ }
 };

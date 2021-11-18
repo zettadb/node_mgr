@@ -15,7 +15,7 @@
 #include <string>
 
 // g++ -o http_post_para http_post_para.cc
-// ./http_post_para http://127.0.0.1:9998 {\"key\":\"value\"}
+// ./http_post_para http://127.0.0.1:9998 "{\"key\":\"value\"}"
 
 #define BUFSIZE 2048		//2K
 #define HTTP_DEFAULT_PORT 	80

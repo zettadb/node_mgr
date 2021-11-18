@@ -15,9 +15,9 @@
 #include <string>
 
 // g++ -o http_post_file http_post_file.cc
-// ./http_post_file http://127.0.0.1:9998 {\"key\":\"value\"} ./http_get_range.json
-// ./http_post_file http://127.0.0.1:9998 {\"file_type\":\"mysql\"} http_get_range.json
-// ./http_post_file http://127.0.0.1:9998 {\"file_type\":\"pgsql\"} http_get_range.json
+// ./http_post_file http://127.0.0.1:9998 "{\"key\":\"value\"}" ./http_get_range.json
+// ./http_post_file http://127.0.0.1:9998 "{\"file_type\":\"mysql\"}" ./http_get_range.json
+// ./http_post_file http://127.0.0.1:9998 "{\"file_type\":\"pgsql\"}" ./http_get_range.json
 
 #define BUFSIZE 2048		//2K
 #define HTTP_DEFAULT_PORT 	80
@@ -246,19 +246,20 @@ int Http_client_post_file(const char *url, const char *post_str, const char *fil
 	
 	while(filelen>0)
 	{
-		int wlen;
 		int rlen = fread(http_buf, 1, BUFSIZE, fp);
-		wlen = send(socket_fd, http_buf, rlen, 0);
-		if(wlen==rlen)
-			filelen -= wlen;
-		else
+		int wlen = send(socket_fd, http_buf, rlen, 0);
+		int wtotal = wlen;
+		
+		while(wlen>=0 && wtotal<rlen)
 		{
-			while(wlen < rlen)
-			{
-				usleep(1000);
-				wlen += send(socket_fd, http_buf+wlen, rlen-wlen, 0);
-			}
+			usleep(1000);
+			wlen = send(socket_fd, http_buf+wtotal, rlen-wtotal, 0);
+			wtotal += wlen;
 		}
+		filelen -= wtotal;
+		
+		if(wlen<0)
+			break;
 	}
 	
 	fclose(fp);
