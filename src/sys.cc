@@ -84,11 +84,7 @@ int System::create_instance(const std::string&cfg_path)
 		
 		Http_client::get_instance();
 
-		std::string cpu;
-		m_global_instance->get_cpu_used(cpu);
-
-		std::string used,free;
-		m_global_instance->get_mem_used(used, free);
+		node_inst->get_local_node();
 	}
 	
 end:
@@ -190,6 +186,8 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret)
 			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
 			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
 			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			cJSON_AddStringToObject(ret_item, "cluster", node->cluster.c_str());
+			cJSON_AddStringToObject(ret_item, "shard", node->shard.c_str());
 			if(get_disk_size(node->path, disk_used, disk_free))
 			{
 				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
@@ -216,6 +214,7 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret)
 			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
 			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
 			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			cJSON_AddStringToObject(ret_item, "cluster", node->cluster.c_str());
 			if(get_disk_size(node->path, disk_used, disk_free))
 			{
 				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
@@ -299,6 +298,8 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret)
 			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
 			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
 			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			cJSON_AddStringToObject(ret_item, "cluster", node->cluster.c_str());
+			cJSON_AddStringToObject(ret_item, "shard", node->shard.c_str());
 			if(get_disk_size(node->path, disk_used, disk_free))
 			{
 				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());
@@ -340,6 +341,7 @@ bool System::get_node_instance(cJSON *root, std::string &str_ret)
 			cJSON_AddStringToObject(ret_item, "user", node->user.c_str());
 			cJSON_AddStringToObject(ret_item, "pwd", node->pwd.c_str());
 			cJSON_AddStringToObject(ret_item, "path", node->path.c_str());
+			cJSON_AddStringToObject(ret_item, "cluster", node->cluster.c_str());
 			if(get_disk_size(node->path, disk_used, disk_free))
 			{
 				cJSON_AddStringToObject(ret_item, "disk_used", disk_used.c_str());

@@ -51,7 +51,6 @@ int main(int argc, char **argv)
 
 	while (!Thread_manager::do_exit)
 	{
-		//Node_info::get_instance()->get_local_node();
 		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 1000);
 	}
 

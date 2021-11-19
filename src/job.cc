@@ -34,6 +34,7 @@ extern int64_t http_server_port;
 extern std::string http_upload_path;
 extern std::string mysql_install_path;
 extern std::string pgsql_install_path;
+extern std::string cluster_install_path;
 extern int64_t stmt_retries;
 extern int64_t stmt_retry_interval_ms;
 extern "C" void *thread_func_job_work(void*thrdarg);
@@ -96,10 +97,12 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_PEEK;
 	else if(strcmp(str, "update_node")==0)
 		job_type = JOB_UPDATE_NODE;
-	else if(strcmp(str, "sn_cmd")==0)
-		job_type = JOB_SN_CMD;
-	else if(strcmp(str, "cn_cmd")==0)
-		job_type = JOB_CN_CMD;
+	else if(strcmp(str, "mysql_cmd")==0)
+		job_type = JOB_MYSQL_CMD;
+	else if(strcmp(str, "pgsql_cmd")==0)
+		job_type = JOB_PGSQL_CMD;
+	else if(strcmp(str, "cluster_cmd")==0)
+		job_type = JOB_CLUSTER_CMD;
 	else if(strcmp(str, "get_node")==0)
 		job_type = JOB_GET_NODE;
 	else if(strcmp(str, "get_info")==0)
@@ -123,6 +126,8 @@ bool Job::get_file_type(char *str, File_type &file_type)
 		file_type = FILE_MYSQL;
 	else if(strcmp(str, "pgsql")==0)
 		file_type = FILE_PGSQL;
+	else if(strcmp(str, "cluster")==0)
+		file_type = FILE_CLUSTER;
 	else
 		file_type = FILE_NONE;
 
@@ -652,35 +657,48 @@ void Job::job_recv(cJSON *root)
 	}
 }
 
-void Job::job_sn_cmd(cJSON *root)
+void Job::job_mysql_cmd(cJSON *root)
 {
 	cJSON *item;
 	item = cJSON_GetObjectItem(root, "cmd");
 	if(item == NULL)
 	{
-		syslog(Logger::ERROR, "get sn cmd error");
+		syslog(Logger::ERROR, "get mysql cmd error");
 		return;
 	}
 
-	std::string cmd = "cd " + mysql_install_path + ";" 
-						+ item->valuestring;
-	syslog(Logger::INFO, "get cn cmd %s",cmd.c_str());
+	std::string cmd = "cd " + mysql_install_path + ";" + item->valuestring;
+	syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
 	system(cmd.c_str());
 }
 
-void Job::job_cn_cmd(cJSON *root)
+void Job::job_pgsql_cmd(cJSON *root)
 {
 	cJSON *item;
 	item = cJSON_GetObjectItem(root, "cmd");
 	if(item == NULL)
 	{
-		syslog(Logger::ERROR, "get cn cmd error");
+		syslog(Logger::ERROR, "get pgsql cmd error");
 		return;
 	}
 
-	std::string cmd = "cd " + pgsql_install_path + ";" 
-						+ item->valuestring;
-	syslog(Logger::INFO, "get cn cmd %s",cmd.c_str());
+	std::string cmd = "cd " + pgsql_install_path + ";" + item->valuestring;
+	syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
+	system(cmd.c_str());
+}
+
+void Job::job_cluster_cmd(cJSON *root)
+{
+	cJSON *item;
+	item = cJSON_GetObjectItem(root, "cmd");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get cluster cmd error");
+		return;
+	}
+
+	std::string cmd = "cd " + cluster_install_path + ";" + item->valuestring;
+	syslog(Logger::INFO, "start cluster cmd : %s",cmd.c_str());
 	system(cmd.c_str());
 }
 
@@ -729,15 +747,19 @@ void Job::job_handle(std::string &job)
 	}
 	else if(job_type == JOB_UPDATE_NODE)
 	{
-		Node_info::get_instance()->node_update_finish = false;
+		Node_info::get_instance()->get_local_node(root);
 	}
-	else if(job_type == JOB_SN_CMD)
+	else if(job_type == JOB_MYSQL_CMD)
 	{
-		job_sn_cmd(root);
+		job_mysql_cmd(root);
 	}
-	else if(job_type == JOB_CN_CMD)
+	else if(job_type == JOB_PGSQL_CMD)
 	{
-		job_cn_cmd(root);
+		job_pgsql_cmd(root);
+	}
+	else if(job_type == JOB_CLUSTER_CMD)
+	{
+		job_cluster_cmd(root);
 	}
 
 	cJSON_Delete(root);

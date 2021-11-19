@@ -51,6 +51,7 @@ std::string http_web_path;
 std::string http_upload_path;
 std::string mysql_install_path;
 std::string pgsql_install_path;
+std::string cluster_install_path;
 
 Http_server::Http_server():
 	wakeupfd(0)
@@ -548,6 +549,8 @@ void Http_server::Http_server_handle_post_file(int &socket, char* buf, int len)
 				filepath = mysql_install_path;
 			else if(file_type == FILE_PGSQL)
 				filepath = pgsql_install_path;
+			else if(file_type == FILE_CLUSTER)
+				filepath = cluster_install_path;
 			else
 				filepath = http_upload_path;
 		}

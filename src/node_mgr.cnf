@@ -60,3 +60,6 @@ mysql_install_path = ../../percona-8.0.18-bin-rel/dba_tools
 # postgresql release path
 pgsql_install_path = ../../postgresql-11.5-rel/scripts
 
+# cluster_mgr release path
+cluster_install_path = ../../cluster_mgr_rel
+

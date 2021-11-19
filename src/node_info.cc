@@ -39,8 +39,7 @@ int64_t stmt_retry_interval_ms = 500;
 std::string cluster_mgr_http_ip;
 int64_t cluster_mgr_http_port = 0;
 
-Node_info::Node_info():
-	node_update_finish(false)
+Node_info::Node_info()
 {
 
 }
@@ -118,14 +117,30 @@ bool Node_info::check_local_ip(std::string &ip)
 
 void Node_info::get_local_node()
 {
-	if(!node_update_finish)
-	{
-		int meta = get_meta_node();
-		int storage = get_storage_node();
-		int computer = get_computer_node();
+	get_meta_node();
+	get_storage_node();
+	get_computer_node();
+}
 
-		node_update_finish = (meta==0 && storage==0 && computer==0);
+void Node_info::get_local_node(cJSON *root)
+{
+	cJSON *item;
+	
+	item = cJSON_GetObjectItem(root, "node_type");
+	if(item == NULL)
+	{
+		get_meta_node();
+		get_storage_node();
+		get_computer_node();
+		return;
 	}
+
+	if(strcmp(item->valuestring, "meta_node"))
+		get_meta_node();
+	else if(strcmp(item->valuestring, "storage_node"))
+		get_storage_node();
+	else if(strcmp(item->valuestring, "computer_node"))
+		get_computer_node();
 }
 
 int Node_info::get_meta_node()

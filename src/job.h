@@ -27,8 +27,9 @@ JOB_RECV,
 JOB_DELETE, 
 JOB_PEEK,
 JOB_UPDATE_NODE,
-JOB_SN_CMD,
-JOB_CN_CMD,
+JOB_MYSQL_CMD,
+JOB_PGSQL_CMD,
+JOB_CLUSTER_CMD,
 JOB_GET_NODE,
 JOB_GET_INFO,
 };
@@ -38,6 +39,7 @@ FILE_TABLE,
 FILE_BINLOG,
 FILE_MYSQL,
 FILE_PGSQL,
+FILE_CLUSTER,
 };
 
 class Job
@@ -88,8 +90,9 @@ public:
 	void job_send(cJSON *root);
 	void job_recv(cJSON *root);
 
-	void job_sn_cmd(cJSON *root);
-	void job_cn_cmd(cJSON *root);
+	void job_mysql_cmd(cJSON *root);
+	void job_pgsql_cmd(cJSON *root);
+	void job_cluster_cmd(cJSON *root);
 
 	void add_job(std::string &str);
 	void job_handle(std::string &job);

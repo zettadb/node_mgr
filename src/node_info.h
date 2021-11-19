@@ -10,6 +10,7 @@
 #include "sys_config.h"
 #include <errno.h>
 #include "global.h"
+#include "job.h"
 
 #include <pthread.h>
 #include <vector>
@@ -36,7 +37,6 @@ public:
 	std::vector<Node*> vec_meta_node;
 	std::vector<Node*> vec_storage_node;
 	std::vector<Node*> vec_computer_node;
-	bool node_update_finish;
 	
 private:
 	static Node_info *m_inst;
@@ -54,8 +54,8 @@ public:
 	void get_local_ip();
 	bool check_local_ip(std::string &ip);
 
-	void clear_node_update(){node_update_finish = false;};
 	void get_local_node();
+	void get_local_node(cJSON *root);
 	int get_meta_node();
 	int get_storage_node();
 	int get_computer_node();

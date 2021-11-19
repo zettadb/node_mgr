@@ -53,15 +53,16 @@ curl -d "{\"job_type\":\"get_info\"}" http://127.0.0.1:9998/
 "d_ip":"127.0.0.1","d_port":6007,"d_user":"pgx","s_pwd":"pgx_pwd","d_dbname":"postgres_$$_public","d_table_name":"t17"}
 
 6. send a meta/storage or computer cmd for node to run
-{"job_type":"sn_cmd","cmd":"./startmysql.sh 6001"}
-{"job_type":"cn_cmd","cmd":"python2 start_pg.py port=5401"}
-
+{"job_type":"mysql_cmd","cmd":"./startmysql.sh 6001"}
+{"job_type":"pgsql_cmd","cmd":"python2 start_pg.py port=5401"}
+{"job_type":"cluster_cmd","cmd":"bash -x bin/cluster_mgr_safe --debug --pidfile=run.pid cluster_mgr.cnf"}
 
 ## http post file to node_mgr
 
 1. send a file with paramemter for node_mgr to save
 ./http_post_file http://127.0.0.1:9998 "{\"file_type\":\"mysql\"}" ./mysql_shard1.json
 ./http_post_file http://127.0.0.1:9998 "{\"file_type\":\"pgsql\"}" ./postgresql_comp.json
+./http_post_file http://127.0.0.1:9998 "{\"file_type\":\"cluster\"}" ./cluster_mgr.cnf
 
 
 
