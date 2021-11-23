@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include <mutex>
 #include <map>
+#include <list>
 #include <queue>
 #include <string>
 #include <vector>
@@ -32,6 +33,9 @@ JOB_PGSQL_CMD,
 JOB_CLUSTER_CMD,
 JOB_GET_NODE,
 JOB_GET_INFO,
+JOB_GET_STATUS,
+JOB_COLD_BACKUP,
+JOB_COLD_RESTORE,
 };
 enum File_type {
 FILE_NONE, 
@@ -56,10 +60,12 @@ private:
 	pthread_mutex_t thread_mtx;
 	pthread_cond_t thread_cond;
 
-	static const int kMaxPathId = 30;
-	int path_id;
-	std::mutex mutex_;
-	std::map<std::string, std::string> map_id_path;
+	static const int kMaxPath = 30;
+	static const int kMaxStatus = 30;
+	std::mutex mutex_path_;
+	std::list<std::pair<std::string, std::string>> list_jobid_path;
+	std::mutex mutex_stauts_;
+	std::list<std::pair<std::string, std::string>> list_jobid_status;
 	
 public:
 	Job();
@@ -80,12 +86,17 @@ public:
 								std::string &binlog_path);
 	bool delete_db_table(std::string &ip, int port, std::string &user, std::string &psw, 
 								std::string &db, std::string &tb);
+	bool get_cnf_path(std::string &ip, int port, std::string &user, std::string &psw, 
+									std::string &cnf_path);
 
 	bool get_http_get_url(std::string &str, std::string &url);
 
-	bool add_file_path(std::string &id, std::string &path);
-	bool get_file_path(std::string &id, std::string &path);
+	bool add_file_path(std::string &jobid, std::string &path);
+	bool get_file_path(std::string &jobid, std::string &path);
 	
+	bool update_jobid_status(std::string &jobid, std::string &status);
+	bool get_jobid_status(std::string &jobid, std::string &status);
+
 	void job_delete(cJSON *root);
 	void job_send(cJSON *root);
 	void job_recv(cJSON *root);
@@ -93,6 +104,9 @@ public:
 	void job_mysql_cmd(cJSON *root);
 	void job_pgsql_cmd(cJSON *root);
 	void job_cluster_cmd(cJSON *root);
+
+	void job_cold_backup(cJSON *root);
+	void job_cold_restore(cJSON *root);
 
 	void add_job(std::string &str);
 	void job_handle(std::string &job);

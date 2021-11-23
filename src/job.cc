@@ -13,6 +13,7 @@
 #include "mysql_conn.h"
 #include "pgsql_conn.h"
 #include "http_client.h"
+#include "hdfs_client.h"
 #include "node_info.h"
 #include <signal.h>
 #include <unistd.h>
@@ -39,8 +40,7 @@ extern int64_t stmt_retries;
 extern int64_t stmt_retry_interval_ms;
 extern "C" void *thread_func_job_work(void*thrdarg);
 
-Job::Job():
-	path_id(0)
+Job::Job()
 {
 	
 }
@@ -107,6 +107,12 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_NODE;
 	else if(strcmp(str, "get_info")==0)
 		job_type = JOB_GET_INFO;
+	else if(strcmp(str, "get_status")==0)
+		job_type = JOB_GET_STATUS;
+	else if(strcmp(str, "coldbackup")==0)
+		job_type = JOB_COLD_BACKUP;
+	else if(strcmp(str, "coldrestore")==0)
+		job_type = JOB_COLD_RESTORE;
 	else
 	{
 		job_type = JOB_NONE;
@@ -230,6 +236,55 @@ bool Job::get_binlog_path(std::string &ip, int port, std::string &user, std::str
 	return true;
 }
 
+bool Job::get_cnf_path(std::string &ip, int port, std::string &user, std::string &psw, 
+								std::string &cnf_path)
+{
+	syslog(Logger::INFO, "get_cnf_path ip=%s,port=%d,user=%s,psw=%s", 
+						ip.c_str(), port, user.c_str(), psw.c_str());
+
+	int retry = stmt_retries;
+	MYSQL_CONN mysql_conn;
+	
+	while(retry--)
+	{
+		if(mysql_conn.connect(NULL, ip.c_str(), port, user.c_str(), psw.c_str()))
+		{
+			syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
+							ip.c_str(), port, user.c_str(), psw.c_str());
+			continue;
+		}
+	
+		if(mysql_conn.send_stmt(SQLCOM_SELECT, "select @@datadir"))
+			continue;
+	
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(mysql_conn.result)))
+		{
+			//syslog(Logger::INFO, "row[]=%s",row[0]);
+			cnf_path = row[0];
+		}
+		else
+		{
+			continue;
+		}
+	
+		break;
+	}
+	mysql_conn.free_mysql_result();
+	mysql_conn.close_conn();
+	
+	if(retry<0)
+		return false;
+	
+	cnf_path = cnf_path.substr(0, cnf_path.rfind("/"));
+	cnf_path = cnf_path.substr(0, cnf_path.rfind("/"));
+	cnf_path = cnf_path.substr(0, cnf_path.rfind("/"));
+
+	cnf_path = cnf_path + "/my_" + std::to_string(port) + ".cnf";
+
+	return true;
+}
+
 bool Job::delete_db_table(std::string &ip, int port, std::string &user, std::string &psw, 
 								std::string &db, std::string &tb)
 {
@@ -264,32 +319,88 @@ bool Job::delete_db_table(std::string &ip, int port, std::string &user, std::str
 	return true;
 }
 
-bool Job::add_file_path(std::string &id, std::string &path)
+bool Job::add_file_path(std::string &jobid, std::string &path)
 {
-	std::unique_lock<std::mutex> lock(mutex_);
+	std::unique_lock<std::mutex> lock(mutex_path_);
 
-	if(map_id_path.size()>=kMaxPathId)
-		map_id_path.erase(std::to_string(path_id));
+	if(list_jobid_path.size()>=kMaxPath)
+		list_jobid_path.pop_back();
 
-	id = std::to_string(path_id);
-	
-	map_id_path[std::to_string(path_id++)] = path;
-	path_id %= kMaxPathId;
+	bool is_exist = false;
+	for (auto it = list_jobid_path.begin(); it != list_jobid_path.end(); ++it)
+	{
+		if(it->first == jobid)
+		{
+			it->second = path;
+			is_exist = true;
+			break;
+		}
+	}
+
+	if(!is_exist)
+		list_jobid_path.push_front(std::make_pair(jobid, path));
 
 	return true;
 }
 
-bool Job::get_file_path(std::string &id, std::string &path)
+bool Job::get_file_path(std::string &jobid, std::string &path)
 {
-	std::unique_lock<std::mutex> lock(mutex_);
+	std::unique_lock<std::mutex> lock(mutex_path_);
 
-	auto it = map_id_path.find(id);
-	if(it == map_id_path.end())
-		return false;
-	else
-		path = it->second;
+	bool ret = false;
+	for (auto it = list_jobid_path.begin(); it != list_jobid_path.end(); ++it)
+	{
+		if(it->first == jobid)
+		{
+			path = it->second;
+			ret = true;
+			break;
+		}
+	}
+
+	return ret;
+}
+
+bool Job::update_jobid_status(std::string &jobid, std::string &status)
+{
+	std::unique_lock<std::mutex> lock(mutex_stauts_);
+
+	if(list_jobid_status.size()>=kMaxStatus)
+		list_jobid_status.pop_back();
+
+	bool is_exist = false;
+	for (auto it = list_jobid_status.begin(); it != list_jobid_status.end(); ++it)
+	{
+		if(it->first == jobid)
+		{
+			it->second = status;
+			is_exist = true;
+			break;
+		}
+	}
+
+	if(!is_exist)
+		list_jobid_status.push_front(std::make_pair(jobid, status));
 
 	return true;
+}
+
+bool Job::get_jobid_status(std::string &jobid, std::string &status)
+{
+	std::unique_lock<std::mutex> lock(mutex_stauts_);
+	
+	bool ret = false;
+	for (auto it = list_jobid_status.begin(); it != list_jobid_status.end(); ++it)
+	{
+		if(it->first == jobid)
+		{
+			status = it->second;
+			ret = true;
+			break;
+		}
+	}
+
+	return ret;
 }
 
 void Job::job_delete(cJSON *root)
@@ -511,17 +622,16 @@ void Job::job_send(cJSON *root)
 		remote_port = item->valueint;
 
 		//set a http get url
-		std::string id;
-		add_file_path(id, tb_path);
+		add_file_path(job_id, tb_path);
 
 		std::string tb_name = tb + ".ibd";
 		std::string post_url = "http://" + remote_ip + ":" + std::to_string(http_server_port);
 		syslog(Logger::INFO, "post_url %s", post_url.c_str());
 
 		cJSON_DeleteItemFromObject(root, "job_type");
-		cJSON_AddStringToObject(root, "job_type", "RECV");
+		cJSON_AddStringToObject(root, "job_type", "recv");
 
-		std::string url = "http://" + ip + ":" + std::to_string(http_server_port) + "/" + id;
+		std::string url = "http://" + ip + ":" + std::to_string(http_server_port) + "/" + job_id;
 		cJSON_AddStringToObject(root, "url", url.c_str());
 
 		char *cjson;
@@ -669,7 +779,16 @@ void Job::job_mysql_cmd(cJSON *root)
 
 	std::string cmd = "cd " + mysql_install_path + ";" + item->valuestring;
 	syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
-	system(cmd.c_str());
+	//system(cmd.c_str());
+	
+	FILE* pfd;
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "job_mysql_cmd error %s" ,cmd.c_str());
+		return;
+	}
+	pclose(pfd);
 }
 
 void Job::job_pgsql_cmd(cJSON *root)
@@ -684,7 +803,16 @@ void Job::job_pgsql_cmd(cJSON *root)
 
 	std::string cmd = "cd " + pgsql_install_path + ";" + item->valuestring;
 	syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
-	system(cmd.c_str());
+	//system(cmd.c_str());
+
+	FILE* pfd;
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "job_pgsql_cmd error %s" ,cmd.c_str());
+		return;
+	}
+	pclose(pfd);
 }
 
 void Job::job_cluster_cmd(cJSON *root)
@@ -699,7 +827,329 @@ void Job::job_cluster_cmd(cJSON *root)
 
 	std::string cmd = "cd " + cluster_install_path + ";" + item->valuestring;
 	syslog(Logger::INFO, "start cluster cmd : %s",cmd.c_str());
-	system(cmd.c_str());
+	//system(cmd.c_str());
+
+	FILE* pfd;
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "job_cluster_cmd error %s" ,cmd.c_str());
+		return;
+	}
+	pclose(pfd);
+}
+
+void Job::job_cold_backup(cJSON *root)
+{
+	std::string job_id;
+	std::string job_status;
+
+	std::string ip;
+	int port;
+	std::string user;
+	std::string pwd;
+	std::string cnf_path;
+
+	std::string date_time;
+	std::string local_path;
+	std::string hdfs_path;
+	std::string record_path;
+	bool is_node_find = false;
+
+	std::string cmd;
+	FILE* pfd;
+	char buf[256];
+	char *line, *p;
+	
+	cJSON *item;
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	job_status = "coldbackup start";
+	update_jobid_status(job_id, job_status);
+
+	//////////////////////////////////////////////////////////////////////
+	//get mysql cnf path
+	item = cJSON_GetObjectItem(root, "s_ip");
+	if(item == NULL)
+	{
+		job_status = "get s_ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "s_port");
+	if(item == NULL)
+	{
+		job_status = "get s_port error";
+		goto end;
+	}
+	port = item->valueint;
+
+	if(!Node_info::get_instance()->check_local_ip(ip))
+	{
+		job_status = ip + " is no local_ip";
+		goto end;
+	}
+	
+	item = cJSON_GetObjectItem(root, "s_user");
+	if(item == NULL)
+	{
+		job_status = "get s_user error";
+		goto end;
+	}
+	user = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "s_pwd");
+	if(item == NULL)
+	{
+		job_status = "get s_pwd error";
+		goto end;
+	}
+	pwd = item->valuestring;
+
+	if(!get_cnf_path(ip, port, user, pwd, cnf_path))
+	{
+		job_status = "get_cnf_path error";
+		goto end;
+	}
+
+	job_status = "coldbackup working";
+	update_jobid_status(job_id, job_status);
+
+	//////////////////////////////////////////////////////////////////////
+	//start backup
+	cmd = "backup -clustername=cname -etcfile=" + cnf_path + " -storagetype=hdfs";
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		job_status = "popen error " + cmd;
+		goto end;
+	}
+
+	line = fgets(buf, 256, pfd);
+	pclose(pfd);
+
+	if(strstr(line, "coldback.tgz") == NULL)
+	{
+		job_status = "popen return error " + std::string(line);
+		goto end;
+	}
+
+	p = strchr(line, '\n');
+	if(p!= NULL)
+		*p = '\0';
+
+	job_status = "coldbackup copying";
+	update_jobid_status(job_id, job_status);
+	
+	//////////////////////////////////////////////////////////////////////
+	//set backup file name in hdfs
+	System::get_instance()->get_date_time(date_time);
+	local_path = std::string(line);
+	
+	for(auto &node: Node_info::get_instance()->vec_meta_node)
+	{
+		if(node->port == port)
+		{
+			hdfs_path = "/coldbackup/meta/coldback_" + date_time + ".tgz";
+			record_path = "/coldbackup/meta.txt";
+			is_node_find = true;
+			break;
+		}
+	}
+
+	if(!is_node_find)
+	{
+		for(auto &node: Node_info::get_instance()->vec_storage_node)
+		{
+			if(node->port == port)
+			{
+				hdfs_path = "/coldbackup/" + node->cluster + "/" + node->shard + 
+							"/coldback_" + date_time + ".tgz";
+				record_path = "/coldbackup/storage.txt";
+				is_node_find = true;
+				break;
+			}
+		}
+	}
+
+	if(!is_node_find)
+	{
+		job_status = "job_coldbackup get node info fail!";
+		goto end;
+	}
+
+	//////////////////////////////////////////////////////////////////////
+	// push file to hdfs and save to record file
+	if(!Hdfs_client::get_instance()->hdfs_push_file(local_path, hdfs_path))
+	{
+		job_status = "job_cold_backup push to hdfs fail!";
+		goto end;
+	}
+
+	hdfs_path += "\n";
+	if(!Hdfs_client::get_instance()->hdfs_record_file(record_path, hdfs_path))
+	{
+		job_status = "job_cold_backup save to record fail!";
+		goto end;
+	}
+
+	job_status = "coldbackup succeed";
+	update_jobid_status(job_id, job_status);
+
+	syslog(Logger::INFO, "job_cold_backup succeed!");
+	return;
+
+end:
+	update_jobid_status(job_id, job_status);
+	syslog(Logger::ERROR, "%s", job_status.c_str());
+}
+
+void Job::job_cold_restore(cJSON *root)
+{
+	std::string job_id;
+	std::string job_status;
+
+	std::string ip;
+	int port;
+	std::string user;
+	std::string pwd;
+	std::string cnf_path;
+
+	std::string date_time;
+	std::string local_path;
+	std::string hdfs_path;
+	std::string record_path;
+	bool is_node_find = false;
+
+	std::string cmd;
+	FILE* pfd;
+	char buf[256];
+	char *line, *p;
+	
+	cJSON *item;
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	job_status = "coldrestore start";
+	update_jobid_status(job_id, job_status);
+
+	//////////////////////////////////////////////////////////////////////
+	//get mysql cnf path
+	item = cJSON_GetObjectItem(root, "s_ip");
+	if(item == NULL)
+	{
+		job_status = "get s_ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "s_port");
+	if(item == NULL)
+	{
+		job_status = "get s_port error";
+		goto end;
+	}
+	port = item->valueint;
+
+	if(!Node_info::get_instance()->check_local_ip(ip))
+	{
+		job_status = ip + " is no local_ip";
+		goto end;
+	}
+	
+	item = cJSON_GetObjectItem(root, "s_user");
+	if(item == NULL)
+	{
+		job_status = "get s_user error";
+		goto end;
+	}
+	user = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "s_pwd");
+	if(item == NULL)
+	{
+		job_status = "get s_pwd error";
+		goto end;
+	}
+	pwd = item->valuestring;
+
+	if(!get_cnf_path(ip, port, user, pwd, cnf_path))
+	{
+		job_status = "get_cnf_path error";
+		goto end;
+	}
+
+	job_status = "coldrestore copying";
+	update_jobid_status(job_id, job_status);
+
+	//////////////////////////////////////////////////////////////////////
+	// pull file from hdfs
+	item = cJSON_GetObjectItem(root, "file");
+	if(item == NULL)
+	{
+		job_status = "get file error";
+		goto end;
+	}
+	hdfs_path = item->valuestring;
+	
+	local_path = hdfs_path.substr(hdfs_path.rfind("/"), hdfs_path.length());
+	local_path = "." + local_path;
+	syslog(Logger::ERROR, "%s", local_path.c_str());
+	syslog(Logger::ERROR, "%s", hdfs_path.c_str());
+	
+	if(!Hdfs_client::get_instance()->hdfs_pull_file(local_path, hdfs_path))
+	{
+		job_status = "job_cold_restore poll from hdfs fail!";
+		goto end;
+	}
+
+	job_status = "coldrestore working";
+	update_jobid_status(job_id, job_status);
+	
+	//////////////////////////////////////////////////////////////////////
+	//start restore
+	cmd = "restore -backupfile-xtrabackup=" + local_path + " -etcfile-new-mysql=" + cnf_path;
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		job_status = "popen error " + cmd;
+		goto end;
+	}
+
+	line = fgets(buf, 256, pfd);
+	pclose(pfd);
+
+	if(strstr(line, "coldback.tgz") == NULL)
+	{
+		job_status = "popen return error " + std::string(line);
+		goto end;
+	}
+
+	p = strchr(line, '\n');
+	if(p!= NULL)
+		*p = '\0';
+	
+	job_status = "coldrestore succeed";
+	update_jobid_status(job_id, job_status);
+
+	syslog(Logger::INFO, "job_cold_restore succeed!");
+	return;
+
+end:
+	update_jobid_status(job_id, job_status);
+	syslog(Logger::ERROR, "%s", job_status.c_str());
 }
 
 void Job::add_job(std::string &str)
@@ -712,7 +1162,7 @@ void Job::add_job(std::string &str)
 
 void Job::job_handle(std::string &job)
 {
-	syslog(Logger::INFO, "job_handle job=%s",job.c_str());
+	//syslog(Logger::INFO, "job_handle job=%s",job.c_str());
 
 	cJSON *root;
 	cJSON *item;
@@ -728,7 +1178,7 @@ void Job::job_handle(std::string &job)
 	item = cJSON_GetObjectItem(root, "job_type");
 	if(item == NULL || !get_job_type(item->valuestring, job_type))
 	{
-		syslog(Logger::ERROR, "get_job_type error");
+		syslog(Logger::ERROR, "job_handle get_job_type error");
 		cJSON_Delete(root);
 		return;
 	}
@@ -760,6 +1210,14 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_CLUSTER_CMD)
 	{
 		job_cluster_cmd(root);
+	}
+	else if(job_type == JOB_COLD_BACKUP)
+	{
+		job_cold_backup(root);
+	}
+	else if(job_type == JOB_COLD_RESTORE)
+	{
+		job_cold_restore(root);
 	}
 
 	cJSON_Delete(root);

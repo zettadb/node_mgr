@@ -15,6 +15,7 @@
 #include "thread_manager.h"
 #include "http_server.h"
 #include "http_client.h"
+#include "hdfs_client.h"
 #include "node_info.h"
 #include <utility>
 #include <sys/types.h>
@@ -41,6 +42,7 @@ System::~System()
 	Job::get_instance()->join_all();
 	delete Job::get_instance();
 
+	delete Hdfs_client::get_instance();
 	delete Http_client::get_instance();
 	delete Node_info::get_instance();
 
@@ -73,6 +75,9 @@ int System::create_instance(const std::string&cfg_path)
 	Thread_manager::get_instance();
 
 	{
+		Http_client::get_instance();
+		Hdfs_client::get_instance();
+		
 		Job *job_inst = Job::get_instance();
 		job_inst->start_job_thread();
 		
@@ -81,9 +86,7 @@ int System::create_instance(const std::string&cfg_path)
 		
 		Http_server *http_inst = Http_server::get_instance();
 		http_inst->start_http_thread();
-		
-		Http_client::get_instance();
-
+			
 		node_inst->get_local_node();
 	}
 	
@@ -109,7 +112,7 @@ bool System::http_para_cmd(const std::string &para, std::string &str_ret)
 
 	if(item == NULL || !Job::get_instance()->get_job_type(item->valuestring, job_type))
 	{
-		syslog(Logger::ERROR, "get_job_type error");
+		syslog(Logger::ERROR, "http_para_cmd get_job_type error");
 		goto end;
 	}
 
@@ -120,6 +123,10 @@ bool System::http_para_cmd(const std::string &para, std::string &str_ret)
 	else if(job_type == JOB_GET_INFO)
 	{
 		ret = get_node_info(root, str_ret);
+	}
+	else if(job_type == JOB_GET_STATUS)
+	{
+		ret = get_job_status(root, str_ret);
 	}
 
 end:
@@ -408,6 +415,42 @@ bool System::get_node_info(cJSON *root, std::string &str_ret)
 	return true;
 }
 
+bool System::get_job_status(cJSON *root, std::string &str_ret)
+{
+	std::string job_id;
+	std::string job_status;
+
+	cJSON *item;
+	cJSON *ret_root;
+	cJSON *ret_item;
+	char *ret_cjson;
+
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return false;
+	}
+	job_id = item->valuestring;
+	
+	if(!Job::get_instance()->get_jobid_status(job_id, job_status))
+		job_status = "none";
+
+	ret_root = cJSON_CreateObject();
+	cJSON_AddStringToObject(ret_root, "job_id", job_id.c_str());
+	cJSON_AddStringToObject(ret_root, "job_status", job_status.c_str());
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+	
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
 bool System::get_disk_size(std::string &path, std::string &used, std::string &free)
 {
 	bool ret = false;
@@ -634,5 +677,16 @@ end:
 		pclose(pfd);
 
 	return ret;
+}
+
+bool System::get_date_time(std::string &date_time)
+{
+	char szNow[36] = { 0 };
+	time_t lt = time(NULL);
+	struct tm* ptr = localtime(&lt);
+	strftime(szNow, 36, "%Y%m%d_%H%M%S", ptr);
+	date_time = szNow;
+	return true;
+
 }
 

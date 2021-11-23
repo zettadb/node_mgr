@@ -34,12 +34,14 @@ if (NOT EXISTS ../include/hdfs)
 endif()
 
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
-add_executable(node_mgr config.cc log.cc  main.cc os.cc sys.cc thread_manager.cc http_server.cc http_client.cc job.cc node_info.cc mysql_conn.cc pgsql_conn.cc cjson.cc)
+add_executable(node_mgr
+config.cc log.cc main.cc os.cc sys.cc thread_manager.cc http_server.cc http_client.cc 
+job.cc node_info.cc mysql_conn.cc pgsql_conn.cc cjson.cc hdfs_client.cc)
 configure_file(sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
 		"${PROJECT_BINARY_DIR}"
 		"${PROJECT_SOURCE_DIR}/../include")
-target_link_libraries(node_mgr mariadb pthread pq)
+target_link_libraries(node_mgr mariadb pthread pq hdfs jvm)
 
 install(TARGETS node_mgr DESTINATION bin)
 install(DIRECTORY ../lib/ DESTINATION lib)

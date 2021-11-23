@@ -48,7 +48,7 @@ http_web_path = ./web
 # http upload path
 http_upload_path = ./upload
 
-# cluster_mgr http server listening port 
+# cluster_mgr http server port 
 cluster_mgr_http_port = 9999
 
 # cluster_mgr http server ip address
@@ -62,4 +62,10 @@ pgsql_install_path = ../../postgresql-11.5-rel/scripts
 
 # cluster_mgr release path
 cluster_install_path = ../../cluster_mgr_rel
+
+# hdfs server port 
+hdfs_server_port = 9000
+
+# hdfs server ip address
+hdfs_server_ip = 192.168.207.164
 
