@@ -18,7 +18,7 @@ log_verbosity = INFO
 num_worker_threads=1
 
 # Interval in seconds a thread waits after it finds no work to do.
-thread_work_interval = 6
+thread_work_interval = 3
 
 # 100MB, if log grows larger than this it's rotated
 max_log_file_size = 100
@@ -68,4 +68,7 @@ hdfs_server_port = 9000
 
 # hdfs server ip address
 hdfs_server_ip = 192.168.207.164
+
+# hdfs save replication
+hdfs_replication = 2
 

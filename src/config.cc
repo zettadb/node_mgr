@@ -34,6 +34,7 @@ extern std::string cluster_mgr_http_ip;
 extern int64_t cluster_mgr_http_port;
 extern std::string hdfs_server_ip;
 extern int64_t hdfs_server_port;
+extern int64_t hdfs_replication;
 
 extern std::string mysql_install_path;
 extern std::string pgsql_install_path;
@@ -218,6 +219,8 @@ void Configs::define_configs()
 		"hdfs_server_port");
 	define_str_config("hdfs_server_ip", hdfs_server_ip, "localhost",
 		"hdfs_server_ip");
+	define_int_config("hdfs_replication", hdfs_replication, 0, 65535, 2,
+		"hdfs_replication");
 
 	define_str_config("mysql_install_path", mysql_install_path, "../../percona-8.0.18-bin-rel/dba_tools",
 		"mysql_install_path");

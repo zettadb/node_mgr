@@ -34,6 +34,7 @@ void PGSQL_CONN::close_conn()
 {
 	if(connected)
 	{
+		free_pgsql_result();
 		PQfinish(conn);
 		connected = false;
 	}
@@ -41,7 +42,7 @@ void PGSQL_CONN::close_conn()
 
 void PGSQL_CONN::free_pgsql_result()
 {
-    if (result)
+    if (result != NULL)
     {
 		PQclear(result);
 		result = NULL;

@@ -65,10 +65,13 @@ curl -d "{\"ver\":\"0.1\",\"job_type\":\"mysql_cmd\",\"cmd\":\"./startmysql.sh 6
 7. get job status
 {"ver":"0.1","job_id":"id123456","job_type":"get_status"}
 
-8. start coldbackup, it will backup mysql and save to hdfs
+8. stop keep alive, before stop a node, otherwise node_mgr will pull up the node soon.
+{"ver":"0.1","job_id":"id123456","job_type":"set_keepalive","keepalive":1}		#keepalive: 0, stop keepalive: 1
+
+9. start cold backup, it will backup mysql and save to hdfs
 {"ver":"0.1","job_id":"id123456","job_type":"coldbackup","s_ip":"127.0.0.1","s_port":6004,"s_user":"pgx","s_pwd":"pgx_pwd"}
 
-9. start coldrestore, it will restore mysql from hdfs
+10. start cold restore, it will restore mysql from hdfs
 {"ver":"0.1","job_id":"id123456","job_type":"coldrestore","s_ip":"127.0.0.1","s_port":6004,"s_user":"pgx","s_pwd":"pgx_pwd",
 "file":"/coldbackup/clust1/shard1/coldback_20211122_234303.tgz"}
 

@@ -24,6 +24,7 @@ Hdfs_client* Hdfs_client::m_inst = NULL;
 
 std::string hdfs_server_ip;
 int64_t hdfs_server_port;
+int64_t hdfs_replication;
 
 Hdfs_client::Hdfs_client()
 {
@@ -37,46 +38,7 @@ Hdfs_client::~Hdfs_client()
 
 void Hdfs_client::hdfs_init()
 {
-	hdfsFS pfs = NULL;
-	int iRet = 0;
-	tOffset iTmp = 0;
 
-	pfs = hdfsConnect(hdfs_server_ip.c_str(), hdfs_server_port);
-	if (NULL == pfs)
-	{
-		syslog(Logger::ERROR, "hdfsConnect failed! errno=%d", errno);
-		return;
-	}
-
-	iTmp = hdfsGetCapacity(pfs); 
-	if (-1 == iTmp)
-	{
-		syslog(Logger::ERROR, "hdfsGetCapacity failed! errno=%d", errno);
-		hdfsDisconnect(pfs);
-		pfs = NULL;
-		return;
-	}
-	syslog(Logger::INFO, "hdfsGetCapacity success! %ld", iTmp);
-
-	iTmp = hdfsGetUsed(pfs); 
-	if (-1 == iTmp)
-	{
-		syslog(Logger::ERROR, "hdfsGetUsed failed! errno=%d", errno);
-		hdfsDisconnect(pfs);
-		pfs = NULL;
-		return;
-	}
-	syslog(Logger::INFO, "hdfsGetUsed success! %ld", iTmp);
-
-	iRet = hdfsExists(pfs, "/coldbackup/test8.txt");
-	syslog(Logger::INFO, "hdfsExists ret=%d", iRet);
-	
-	iRet = hdfsDisconnect(pfs);
-	if (-1 == iRet)
-	{
-		syslog(Logger::ERROR, "hdfsDisconnect failed! errno=%d",  errno);
-		return;
-	}
 }
 
 bool Hdfs_client::hdfs_pull_file(std::string &local_file, std::string &hdfs_file)
@@ -178,7 +140,7 @@ bool Hdfs_client::hdfs_push_file(std::string &local_file, std::string &hdfs_file
 		goto end;
 	}
 
-	pfile = hdfsOpenFile(pfs, hdfs_file.c_str(), O_WRONLY | O_CREAT, 0, 2, 0); 
+	pfile = hdfsOpenFile(pfs, hdfs_file.c_str(), O_WRONLY | O_CREAT, 0, hdfs_replication, 0); 
 	if (NULL == pfile)
 	{
 		syslog(Logger::ERROR, "hdfsOpenFile failed! szFilePath=%s,errno=%d\n", hdfs_file.c_str(), errno);
@@ -269,9 +231,9 @@ bool Hdfs_client::hdfs_record_file(std::string &record_file, std::string &hdfs_f
 
 	iRet = hdfsExists(pfs, record_file.c_str());
 	if(iRet == 0)
-		pfile = hdfsOpenFile(pfs, record_file.c_str(), O_WRONLY | O_APPEND, 0, 2, 0); 
+		pfile = hdfsOpenFile(pfs, record_file.c_str(), O_WRONLY | O_APPEND, 0, 0, 0); 
 	else
-		pfile = hdfsOpenFile(pfs, record_file.c_str(), O_WRONLY | O_CREAT, 0, 2, 0); 
+		pfile = hdfsOpenFile(pfs, record_file.c_str(), O_WRONLY | O_CREAT, 0, hdfs_replication, 0); 
 	
 	if (NULL == pfile)
 	{

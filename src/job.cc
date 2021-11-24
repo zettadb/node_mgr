@@ -109,6 +109,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_INFO;
 	else if(strcmp(str, "get_status")==0)
 		job_type = JOB_GET_STATUS;
+	else if(strcmp(str, "set_keepalive")==0)
+		job_type = JOB_SET_KEEPALIVE;
 	else if(strcmp(str, "coldbackup")==0)
 		job_type = JOB_COLD_BACKUP;
 	else if(strcmp(str, "coldrestore")==0)

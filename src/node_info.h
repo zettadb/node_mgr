@@ -11,6 +11,8 @@
 #include <errno.h>
 #include "global.h"
 #include "job.h"
+#include "mysql_conn.h"
+#include "pgsql_conn.h"
 
 #include <pthread.h>
 #include <vector>
@@ -20,6 +22,8 @@
 class Node
 {
 public:
+	enum Node_type {NONE, META, STORAGE, COMPUTER};
+	Node_type type;
 	std::string ip;
 	int port;
 	std::string user;
@@ -27,13 +31,17 @@ public:
 	std::string path;
 	std::string cluster;
 	std::string shard;
-	Node(std::string &ip_, int port_, std::string &user_, std::string &pwd_):
-		ip(ip_),port(port_),user(user_),pwd(pwd_){ }
+	MYSQL_CONN *mysql_conn;
+	PGSQL_CONN *pgsql_conn;
+	int pullup_wait;
+	Node(Node_type type_, std::string &ip_, int port_, std::string &user_, std::string &pwd_);
+	~Node();
 };
 
 class Node_info
 {
 public:
+	std::mutex mutex_node_;
 	std::vector<Node*> vec_meta_node;
 	std::vector<Node*> vec_storage_node;
 	std::vector<Node*> vec_computer_node;
@@ -41,6 +49,7 @@ public:
 private:
 	static Node_info *m_inst;
 	std::vector<std::string> vec_local_ip;
+	bool stop_keepalive;
 	Node_info();
 	
 public:
@@ -53,12 +62,15 @@ public:
 	void start_instance();
 	void get_local_ip();
 	bool check_local_ip(std::string &ip);
+	void set_keep_alive(bool alive){ stop_keepalive = alive; }
 
 	void get_local_node();
 	void get_local_node(cJSON *root);
 	int get_meta_node();
 	int get_storage_node();
 	int get_computer_node();
+	
+	void keepalive_nodes();
 };
 
 #endif // !NODE_INFO_H

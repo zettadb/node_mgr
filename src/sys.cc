@@ -128,6 +128,21 @@ bool System::http_para_cmd(const std::string &para, std::string &str_ret)
 	{
 		ret = get_job_status(root, str_ret);
 	}
+	else if(job_type == JOB_SET_KEEPALIVE)
+	{
+		item = cJSON_GetObjectItem(root, "keepalive");
+		
+		if(item == NULL)
+		{
+			ret = false;
+		}
+		else
+		{
+			Node_info::get_instance()->set_keep_alive(item->valueint);
+			str_ret = "{\"result\":\"succeed\"}";
+			ret = true;
+		}
+	}
 
 end:
 	if(root != NULL)

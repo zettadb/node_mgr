@@ -39,7 +39,30 @@ int64_t stmt_retry_interval_ms = 500;
 std::string cluster_mgr_http_ip;
 int64_t cluster_mgr_http_port = 0;
 
-Node_info::Node_info()
+extern std::string mysql_install_path;
+extern std::string pgsql_install_path;
+extern std::string cluster_install_path;
+
+Node::Node(Node_type type_, std::string &ip_, int port_, std::string &user_, std::string &pwd_):
+	type(type_),ip(ip_),port(port_),user(user_),pwd(pwd_),
+	mysql_conn(NULL),pgsql_conn(NULL),pullup_wait(0)
+{
+
+}
+		
+Node::~Node()
+{
+	if(mysql_conn != NULL)
+	{
+		delete mysql_conn;
+	}
+	if(pgsql_conn != NULL)
+	{
+		delete pgsql_conn;
+	}
+}
+
+Node_info::Node_info():stop_keepalive(false)
 {
 
 }
@@ -145,6 +168,8 @@ void Node_info::get_local_node(cJSON *root)
 
 int Node_info::get_meta_node()
 {
+	std::unique_lock<std::mutex> lock(mutex_node_);
+
 	cJSON *root;
 	cJSON *item;
 	cJSON *sub_item;
@@ -216,8 +241,11 @@ int Node_info::get_meta_node()
 				break;
 			pwd = sub_item->valuestring;
 
-			Node *node = new Node(ip, port, user, pwd);
+			Node *node = new Node(Node::META, ip, port, user, pwd);
 			vec_meta_node.push_back(node);
+
+			MYSQL_CONN *conn = new MYSQL_CONN();
+			node->mysql_conn = conn;
 		}
 
 	}
@@ -226,22 +254,22 @@ int Node_info::get_meta_node()
 	for (auto &node:vec_meta_node)
 	{
 		int retry = stmt_retries;
-		MYSQL_CONN mysql_conn;
+		auto conn = node->mysql_conn;
 		
 		while(retry--)
 		{
-			if(mysql_conn.connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
 								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
 				continue;
 			}
-		
-			if(mysql_conn.send_stmt(SQLCOM_SELECT, "select @@datadir"))
+			
+			if(conn->send_stmt(SQLCOM_SELECT, "select @@datadir"))
 				continue;
 		
 			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(mysql_conn.result)))
+			if ((row = mysql_fetch_row(conn->result)))
 			{
 				//syslog(Logger::INFO, "row[]=%s",row[0]);
 				node->path = row[0];
@@ -253,8 +281,7 @@ int Node_info::get_meta_node()
 		
 			break;
 		}
-		mysql_conn.free_mysql_result();
-		mysql_conn.close_conn();
+		conn->free_mysql_result();
 	}
 
 	return ret;
@@ -262,6 +289,8 @@ int Node_info::get_meta_node()
 
 int Node_info::get_storage_node()
 {
+	std::unique_lock<std::mutex> lock(mutex_node_);
+
 	cJSON *root;
 	cJSON *item;
 	cJSON *sub_item;
@@ -333,7 +362,7 @@ int Node_info::get_storage_node()
 				break;
 			pwd = sub_item->valuestring;
 
-			Node *node = new Node(ip, port, user, pwd);
+			Node *node = new Node(Node::STORAGE, ip, port, user, pwd);
 			vec_storage_node.push_back(node);
 
 			sub_item = cJSON_GetObjectItem(item, "cluster");
@@ -345,6 +374,9 @@ int Node_info::get_storage_node()
 			if(sub_item == NULL)
 				break;
 			node->shard = sub_item->valuestring;
+
+			MYSQL_CONN *conn = new MYSQL_CONN();
+			node->mysql_conn = conn;
 		}
 	}
 
@@ -352,22 +384,22 @@ int Node_info::get_storage_node()
 	for (auto &node:vec_storage_node)
 	{
 		int retry = stmt_retries;
-		MYSQL_CONN mysql_conn;
+		auto conn = node->mysql_conn;
 		
 		while(retry--)
 		{
-			if(mysql_conn.connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
 								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
 				continue;
 			}
-		
-			if(mysql_conn.send_stmt(SQLCOM_SELECT, "select @@datadir"))
+			
+			if(conn->send_stmt(SQLCOM_SELECT, "select @@datadir"))
 				continue;
 		
 			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(mysql_conn.result)))
+			if ((row = mysql_fetch_row(conn->result)))
 			{
 				//syslog(Logger::INFO, "row[]=%s",row[0]);
 				node->path = row[0];
@@ -379,8 +411,7 @@ int Node_info::get_storage_node()
 		
 			break;
 		}
-		mysql_conn.free_mysql_result();
-		mysql_conn.close_conn();
+		conn->free_mysql_result();
 	}
 
 	return ret;
@@ -388,6 +419,8 @@ int Node_info::get_storage_node()
 
 int Node_info::get_computer_node()
 {
+	std::unique_lock<std::mutex> lock(mutex_node_);
+
 	cJSON *root;
 	cJSON *item;
 	cJSON *sub_item;
@@ -459,13 +492,16 @@ int Node_info::get_computer_node()
 				break;
 			pwd = sub_item->valuestring;
 
-			Node *node = new Node(ip, port, user, pwd);
+			Node *node = new Node(Node::COMPUTER, ip, port, user, pwd);
 			vec_computer_node.push_back(node);
 
 			sub_item = cJSON_GetObjectItem(item, "cluster");
 			if(sub_item == NULL)
 				break;
 			node->cluster = sub_item->valuestring;
+
+			PGSQL_CONN *conn = new PGSQL_CONN();
+			node->pgsql_conn = conn;
 		}
 	}
 
@@ -473,32 +509,218 @@ int Node_info::get_computer_node()
 	for (auto &node:vec_computer_node)
 	{
 		int retry = stmt_retries;
-		PGSQL_CONN pgsql_conn;
+		auto conn = node->pgsql_conn;
 		
 		while(retry--)
 		{
-			if(pgsql_conn.connect("postgres", node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect("postgres", node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
 								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
 				continue;
 			}
 		
-			if(pgsql_conn.send_stmt(PG_COPYRES_TUPLES, "SELECT setting FROM pg_settings WHERE name='data_directory'"))
+			if(conn->send_stmt(PG_COPYRES_TUPLES, "SELECT setting FROM pg_settings WHERE name='data_directory'"))
 				continue;
 
-			if(PQntuples(pgsql_conn.result) == 1)
+			if(PQntuples(conn->result) == 1)
 			{
-				//syslog(Logger::INFO, "presult = %s", PQgetvalue(pgsql_conn.result,0,0));
-				node->path = PQgetvalue(pgsql_conn.result,0,0);
+				//syslog(Logger::INFO, "presult = %s", PQgetvalue(conn->result,0,0));
+				node->path = PQgetvalue(conn->result,0,0);
 			}
 			
 			break;
 		}
-		pgsql_conn.free_pgsql_result();
-		pgsql_conn.close_conn();
+		conn->free_pgsql_result();
 	}
 
 	return ret;
+}
+
+void Node_info::keepalive_nodes()
+{
+	if(stop_keepalive)
+		return;
+	
+	std::unique_lock<std::mutex> lock(mutex_node_);
+
+	/////////////////////////////////////////////////////////////
+	// keep alive of meta
+	for (auto &node:vec_meta_node)
+	{
+		if(node->pullup_wait>0)
+		{
+			node->pullup_wait--;
+			continue;
+		}
+	
+		int retry = stmt_retries;
+		auto conn = node->mysql_conn;
+		
+		while(retry--)
+		{
+			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			{
+				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
+								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+				continue;
+			}
+			
+			if(conn->send_stmt(SQLCOM_SELECT, "select version()"))
+				continue;
+		
+			MYSQL_ROW row;
+			if ((row = mysql_fetch_row(conn->result)))
+			{
+				//syslog(Logger::INFO, "row[]=%s",row[0]);
+				if (strcasestr(row[0], "kunlun-storage"))
+					break;
+			}
+			else
+			{
+				continue;
+			}
+		
+			break;
+		}
+		conn->free_mysql_result();
+
+		if(retry<0)
+		{
+			syslog(Logger::ERROR, "meta_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
+			node->pullup_wait = 3;
+
+			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(node->port);
+			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
+			//system(cmd.c_str());
+			
+			FILE* pfd;
+			pfd = popen(cmd.c_str(), "r");
+			if(!pfd)
+			{
+				syslog(Logger::ERROR, "pullup node error %s" ,cmd.c_str());
+				return;
+			}
+			pclose(pfd);
+		}
+	}
+
+	/////////////////////////////////////////////////////////////
+	// keep alive of storage
+	for (auto &node:vec_storage_node)
+	{
+		if(node->pullup_wait>0)
+		{
+			node->pullup_wait--;
+			continue;
+		}
+	
+		int retry = stmt_retries;
+		auto conn = node->mysql_conn;
+		
+		while(retry--)
+		{
+			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			{
+				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
+								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+				continue;
+			}
+			
+			if(conn->send_stmt(SQLCOM_SELECT, "select version()"))
+				continue;
+		
+			MYSQL_ROW row;
+			if ((row = mysql_fetch_row(conn->result)))
+			{
+				//syslog(Logger::INFO, "row[]=%s",row[0]);
+				if (strcasestr(row[0], "kunlun-storage"))
+					break;
+			}
+			else
+			{
+				continue;
+			}
+		
+			break;
+		}
+		conn->free_mysql_result();
+
+		if(retry<0)
+		{
+			syslog(Logger::ERROR, "storage_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
+			node->pullup_wait = 3;
+
+			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(node->port);
+			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
+			//system(cmd.c_str());
+			
+			FILE* pfd;
+			pfd = popen(cmd.c_str(), "r");
+			if(!pfd)
+			{
+				syslog(Logger::ERROR, "pullup node error %s" ,cmd.c_str());
+				return;
+			}
+			pclose(pfd);
+		}
+	}
+
+	/////////////////////////////////////////////////////////////
+	// keep alive of computer
+	for (auto &node:vec_computer_node)
+	{
+		if(node->pullup_wait>0)
+		{
+			node->pullup_wait--;
+			continue;
+		}
+
+		int retry = stmt_retries;
+		auto conn = node->pgsql_conn;
+		
+		while(retry--)
+		{
+			if(conn->connect("postgres", node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			{
+				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
+								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+				continue;
+			}
+		
+			if(conn->send_stmt(PG_COPYRES_TUPLES, "select version()"))
+				continue;
+
+			if(PQntuples(conn->result) == 1)
+			{
+				//syslog(Logger::INFO, "presult = %s", PQgetvalue(conn->result,0,0));
+				if (strcasestr(PQgetvalue(conn->result,0,0), "PostgreSQL"))
+					break;
+			}
+			
+			break;
+		}
+		conn->free_pgsql_result();
+
+		if(retry<0)
+		{
+			syslog(Logger::ERROR, "computer_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
+			node->pullup_wait = 3;
+
+			std::string cmd = "cd " + pgsql_install_path + ";python2 start_pg.py port=" + std::to_string(node->port);
+			syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
+			//system(cmd.c_str());
+			
+			FILE* pfd;
+			pfd = popen(cmd.c_str(), "r");
+			if(!pfd)
+			{
+				syslog(Logger::ERROR, "pullup node error %s" ,cmd.c_str());
+				return;
+			}
+			pclose(pfd);
+		}
+	}
+
 }
 
