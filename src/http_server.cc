@@ -204,7 +204,7 @@ Http_server::Content_type Http_server::Get_http_content_type(const char* buf)
 
 int Http_server::Listen_socket(int port)
 {
-	int ls = socket(AF_INET, SOCK_STREAM, 0);
+	int ls = socket(AF_INET, SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC, 0);
 	if (ls == -1)
 	{
 		syslog(Logger::ERROR, "socket failed %s", strerror(errno));
@@ -698,7 +698,7 @@ void Http_server::Http_server_accept()
 		if (pollfds[0].revents & POLLIN)
 		{
 			memset(&client_addr, 0, sizeof(client_addr));
-			client_socket = accept(listenfd, (struct sockaddr *)&client_addr, &len);
+			client_socket = accept4(listenfd, (struct sockaddr *)&client_addr, &len, SOCK_NONBLOCK|SOCK_CLOEXEC);
 			
 			if (client_socket <= 0)
 			{

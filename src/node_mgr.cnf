@@ -67,7 +67,7 @@ cluster_install_path = ../../cluster_mgr_rel
 hdfs_server_port = 9000
 
 # hdfs server ip address
-hdfs_server_ip = 192.168.207.164
+hdfs_server_ip = 192.168.0.127
 
 # hdfs save replication
 hdfs_replication = 2
