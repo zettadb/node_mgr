@@ -128,20 +128,9 @@ bool System::http_para_cmd(const std::string &para, std::string &str_ret)
 	{
 		ret = get_job_status(root, str_ret);
 	}
-	else if(job_type == JOB_SET_KEEPALIVE)
+	else if(job_type == JOB_AUTO_PULLUP)
 	{
-		item = cJSON_GetObjectItem(root, "keepalive");
-		
-		if(item == NULL)
-		{
-			ret = false;
-		}
-		else
-		{
-			Node_info::get_instance()->set_keep_alive(item->valueint);
-			str_ret = "{\"result\":\"succeed\"}";
-			ret = true;
-		}
+		ret = set_auto_pullup(root, str_ret);
 	}
 
 end:
@@ -427,6 +416,32 @@ bool System::get_node_info(cJSON *root, std::string &str_ret)
 	if(ret_cjson != NULL)
 		free(ret_cjson);
 
+	return true;
+}
+
+bool System::set_auto_pullup(cJSON *root, std::string &str_ret)
+{
+	cJSON *item;
+	int minutes = 0;
+	int port = 0;
+
+	item = cJSON_GetObjectItem(root, "minutes");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_auto_pullup get minutes error");
+		return false;
+	}
+	minutes = item->valueint;
+	
+	item = cJSON_GetObjectItem(root, "port");
+	if(item != NULL)
+	{
+		port = item->valueint;
+	}
+
+	Node_info::get_instance()->set_auto_pullup(minutes*60, port);
+
+	str_ret = "{\"result\":\"succeed\"}\r\n";
 	return true;
 }
 

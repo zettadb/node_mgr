@@ -33,6 +33,8 @@ public:
 	std::string shard;
 	MYSQL_CONN *mysql_conn;
 	PGSQL_CONN *pgsql_conn;
+
+	// pullup_wait<0 : stop keepalive,   ==0 £ºstart keepalive,   >0 : wait to 0
 	int pullup_wait;
 	Node(Node_type type_, std::string &ip_, int port_, std::string &user_, std::string &pwd_);
 	~Node();
@@ -49,7 +51,6 @@ public:
 private:
 	static Node_info *m_inst;
 	std::vector<std::string> vec_local_ip;
-	bool stop_keepalive;
 	Node_info();
 	
 public:
@@ -62,14 +63,14 @@ public:
 	void start_instance();
 	void get_local_ip();
 	bool check_local_ip(std::string &ip);
-	void set_keep_alive(bool alive){ stop_keepalive = alive; }
 
 	void get_local_node();
 	void get_local_node(cJSON *root);
 	int get_meta_node();
 	int get_storage_node();
 	int get_computer_node();
-	
+
+	void set_auto_pullup(int seconds, int port);
 	void keepalive_nodes();
 };
 

@@ -65,8 +65,12 @@ curl -d "{\"ver\":\"0.1\",\"job_type\":\"mysql_cmd\",\"cmd\":\"./startmysql.sh 6
 7. get job status
 {"ver":"0.1","job_id":"id123456","job_type":"get_status"}
 
-8. stop keep alive, before stop a node, otherwise node_mgr will pull up the node soon.
-{"ver":"0.1","job_id":"id123456","job_type":"set_keepalive","keepalive":1}		#keepalive: 0, stop keepalive: 1
+8. stop auto pullup with time of minutes, before stop a node, otherwise node_mgr will pull up the node soon.
+{"ver":"0.1","job_id":"id123456","job_type":"auto_pullup","minutes":10,"port":6001}
+"minutes":-1	:  stop auto pullup always
+"minutes":0	:  start auto pullup
+"minutes":m	:  stop auto pullup in m minutes
+if the json without the item "port", it will done on all of the port.
 
 9. start cold backup, it will backup mysql and save to hdfs
 {"ver":"0.1","job_id":"id123456","job_type":"coldbackup","s_ip":"127.0.0.1","s_port":6004,"s_user":"pgx","s_pwd":"pgx_pwd"}

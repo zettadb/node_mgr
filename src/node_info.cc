@@ -33,12 +33,15 @@
 
 Node_info* Node_info::m_inst = NULL;
 
+int64_t pullup_wait_const = 9;
+
 int64_t stmt_retries = 3;
 int64_t stmt_retry_interval_ms = 500;
 
 std::string cluster_mgr_http_ip;
 int64_t cluster_mgr_http_port = 0;
 
+extern int64_t thread_work_interval;
 extern std::string mysql_install_path;
 extern std::string pgsql_install_path;
 extern std::string cluster_install_path;
@@ -62,7 +65,7 @@ Node::~Node()
 	}
 }
 
-Node_info::Node_info():stop_keepalive(false)
+Node_info::Node_info()
 {
 
 }
@@ -537,20 +540,68 @@ int Node_info::get_computer_node()
 	return ret;
 }
 
+void Node_info::set_auto_pullup(int seconds, int port)
+{
+	std::unique_lock<std::mutex> lock(mutex_node_);
+
+	if(port<=0)		//done on all of the port
+	{
+		for (auto &node:vec_meta_node)
+			node->pullup_wait = seconds;
+
+		for (auto &node:vec_storage_node)
+			node->pullup_wait = seconds;
+
+		for (auto &node:vec_computer_node)
+			node->pullup_wait = seconds;
+	}
+	else	//find the node compare by port
+	{
+		for (auto &node:vec_meta_node)
+		{
+			if(node->port == port)
+			{
+				node->pullup_wait = seconds;
+				return;
+			}
+		}
+
+		for (auto &node:vec_storage_node)
+		{
+			if(node->port == port)
+			{
+				node->pullup_wait = seconds;
+				return;
+			}
+		}
+
+		for (auto &node:vec_computer_node)
+		{
+			if(node->port == port)
+			{
+				node->pullup_wait = seconds;
+				return;
+			}
+		}
+	}
+	
+}
+
 void Node_info::keepalive_nodes()
 {
-	if(stop_keepalive)
-		return;
-	
 	std::unique_lock<std::mutex> lock(mutex_node_);
 
 	/////////////////////////////////////////////////////////////
 	// keep alive of meta
 	for (auto &node:vec_meta_node)
 	{
-		if(node->pullup_wait>0)
+		if(node->pullup_wait<0)
+			continue;
+		else if(node->pullup_wait>0)
 		{
-			node->pullup_wait--;
+			node->pullup_wait -= thread_work_interval;
+			if(node->pullup_wait<0)
+				node->pullup_wait = 0;
 			continue;
 		}
 	
@@ -588,7 +639,7 @@ void Node_info::keepalive_nodes()
 		if(retry<0)
 		{
 			syslog(Logger::ERROR, "meta_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
-			node->pullup_wait = 3;
+			node->pullup_wait = pullup_wait_const;
 
 			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(node->port);
 			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
@@ -609,9 +660,13 @@ void Node_info::keepalive_nodes()
 	// keep alive of storage
 	for (auto &node:vec_storage_node)
 	{
-		if(node->pullup_wait>0)
+		if(node->pullup_wait<0)
+			continue;
+		else if(node->pullup_wait>0)
 		{
-			node->pullup_wait--;
+			node->pullup_wait -= thread_work_interval;
+			if(node->pullup_wait<0)
+				node->pullup_wait = 0;
 			continue;
 		}
 	
@@ -649,7 +704,7 @@ void Node_info::keepalive_nodes()
 		if(retry<0)
 		{
 			syslog(Logger::ERROR, "storage_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
-			node->pullup_wait = 3;
+			node->pullup_wait = pullup_wait_const;
 
 			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(node->port);
 			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
@@ -670,9 +725,13 @@ void Node_info::keepalive_nodes()
 	// keep alive of computer
 	for (auto &node:vec_computer_node)
 	{
-		if(node->pullup_wait>0)
+		if(node->pullup_wait<0)
+			continue;
+		else if(node->pullup_wait>0)
 		{
-			node->pullup_wait--;
+			node->pullup_wait -= thread_work_interval;
+			if(node->pullup_wait<0)
+				node->pullup_wait = 0;
 			continue;
 		}
 
@@ -705,7 +764,7 @@ void Node_info::keepalive_nodes()
 		if(retry<0)
 		{
 			syslog(Logger::ERROR, "computer_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
-			node->pullup_wait = 3;
+			node->pullup_wait = pullup_wait_const;
 
 			std::string cmd = "cd " + pgsql_install_path + ";python2 start_pg.py port=" + std::to_string(node->port);
 			syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());

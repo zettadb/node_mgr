@@ -109,8 +109,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_INFO;
 	else if(strcmp(str, "get_status")==0)
 		job_type = JOB_GET_STATUS;
-	else if(strcmp(str, "set_keepalive")==0)
-		job_type = JOB_SET_KEEPALIVE;
+	else if(strcmp(str, "auto_pullup")==0)
+		job_type = JOB_AUTO_PULLUP;
 	else if(strcmp(str, "coldbackup")==0)
 		job_type = JOB_COLD_BACKUP;
 	else if(strcmp(str, "coldrestore")==0)
@@ -946,6 +946,8 @@ void Job::job_cold_backup(cJSON *root)
 	p = strchr(line, '\n');
 	if(p!= NULL)
 		*p = '\0';
+
+	syslog(Logger::INFO, "job_cold_backup file %s", line);
 
 	job_status = "coldbackup copying";
 	update_jobid_status(job_id, job_status);
