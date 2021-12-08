@@ -26,19 +26,22 @@ extern int64_t mysql_max_packet_size;
 
 extern int64_t num_job_threads;
 extern int64_t num_http_threads;
-extern int64_t http_server_port;
+extern int64_t node_mgr_http_port;
 extern std::string http_web_path;
 extern std::string http_upload_path;
 
 extern std::string cluster_mgr_http_ip;
 extern int64_t cluster_mgr_http_port;
-extern std::string hdfs_server_ip;
-extern int64_t hdfs_server_port;
-extern int64_t hdfs_replication;
+std::string hdfs_server_ip;
+int64_t hdfs_server_port;
+int64_t hdfs_replication;
 
-extern std::string mysql_install_path;
-extern std::string pgsql_install_path;
-extern std::string cluster_install_path;
+extern std::string program_binaries_path;
+extern std::string instance_binaries_path;
+extern std::string storage_prog_package_name;
+extern std::string computer_prog_package_name;
+extern int64_t storage_instance_port_start;
+extern int64_t computer_instance_port_start;
 
 Configs *Configs::get_instance()
 {
@@ -194,7 +197,7 @@ void Configs::define_configs()
 		"Number of job work threads to create.");
 	define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
 		"Number of http server threads to create.");
-	define_int_config("http_server_port", http_server_port, 1000, 100000, 1000,
+	define_int_config("node_mgr_http_port", node_mgr_http_port, 1000, 65535, 5001,
 		"http server listen port.");
 
 	char def_log_path[64];
@@ -210,7 +213,7 @@ void Configs::define_configs()
 	define_str_config("http_upload_path", http_upload_path, "../upload",
 		"http_upload_path");
 
-	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 0, 65535, 0,
+	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 0, 65535, 5000,
 		"cluster_mgr_http_port");
 	define_str_config("cluster_mgr_http_ip", cluster_mgr_http_ip, "localhost",
 		"cluster_mgr_http_ip");
@@ -222,12 +225,20 @@ void Configs::define_configs()
 	define_int_config("hdfs_replication", hdfs_replication, 0, 65535, 2,
 		"hdfs_replication");
 
-	define_str_config("mysql_install_path", mysql_install_path, "../../percona-8.0.18-bin-rel/dba_tools",
-		"mysql_install_path");
-	define_str_config("pgsql_install_path", pgsql_install_path, "../../postgresql-11.5-rel/scripts",
-		"pgsql_install_path");
-	define_str_config("cluster_install_path", cluster_install_path, "../../cluster_mgr_rel",
-		"cluster_install_path");
+	define_str_config("program_binaries_path", program_binaries_path, "../../../program_binaries",
+		"program_binaries_path");
+	define_str_config("instance_binaries_path", instance_binaries_path, "../../../instance_binaries",
+		"instance_binaries_path");
+	define_str_config("storage_prog_package_name", storage_prog_package_name, "percona-8.0.18-bin-rel",
+		"storage_prog_package_name");
+	define_str_config("computer_prog_package_name", computer_prog_package_name, "postgresql-11.5-rel",
+		"computer_prog_package_name");
+
+	define_int_config("storage_instance_port_start", storage_instance_port_start, 0, 6010, 0,
+		"storage_instance_port_start");
+	define_int_config("computer_instance_port_start", computer_instance_port_start, 0, 5010, 0,
+		"computer_instance_port_start");
+
 
 	/*
 	  There is no practical way we can prevent multiple cluster_mgr processes

@@ -144,7 +144,7 @@ int Http_client_socket(const char *ip, int port)
  * @retval 
  *	0 : success
  *  -1 : url error
- *  -2 : post_str is to long
+ *  -2 : post_str is too long
  *  -3 : http connect fail
  *  -4 : http return error
  */
@@ -166,7 +166,7 @@ int Http_client_post_para(const char *url, const char *post_str, std::string &re
 	int n = snprintf(http_buf, BUFSIZE, HTTP_POST_PARA_STR, path, ip, port, strlen(post_str), post_str);
 	if(n >= sizeof(http_buf)-1)
 	{
-		printf("post_str %s is to long\n", post_str);
+		printf("post_str %s is too long\n", post_str);
 		return -2;
 	}
 	

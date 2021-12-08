@@ -174,6 +174,13 @@ int Http_client::Http_client_socket(const char *ip, int port)
 	if((socket_fd = socket(AF_INET,SOCK_STREAM,0)) == -1)
 		return -1;
 
+	struct timeval timeout = {1,0}; 
+	if (setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(struct timeval)))
+	{
+		syslog(Logger::ERROR, "setsockopt SO_SNDTIMEO failed %s", strerror(errno));
+		return -1;
+	}
+
 	if(connect(socket_fd, (struct sockaddr *)&server_addr,sizeof(struct sockaddr)) == -1)
 		return -1;
 
@@ -214,7 +221,7 @@ int Http_client::Http_client_get(const char *url)
 	socket_fd = Http_client_socket(ip,port);
 	if(socket_fd < 0)
 	{
-		syslog(Logger::ERROR, "http connect fail");
+		syslog(Logger::ERROR, "http connect fail %s:%d", ip, port);
 		return -3;
 	}
 	
@@ -280,7 +287,7 @@ int Http_client::Http_client_get_file(const char *url, const char *filename, int
 	socket_fd = Http_client_socket(ip,port);
 	if(socket_fd < 0)
 	{
-		syslog(Logger::ERROR, "http connect fail");
+		syslog(Logger::ERROR, "http connect fail %s:%d", ip, port);
 		return -3;
 	}
 	
@@ -395,7 +402,7 @@ int Http_client::Http_client_get_file_range(const char *url, const char *filenam
 	socket_fd = Http_client_socket(ip,port);
 	if(socket_fd < 0)
 	{
-		syslog(Logger::ERROR, "http connect fail");
+		syslog(Logger::ERROR, "http connect fail %s:%d", ip, port);
 		return -3;
 	}
 
@@ -499,7 +506,7 @@ int Http_client::Http_client_post_para(const char *url, const char *post_str, st
 	socket_fd = Http_client_socket(ip,port);
 	if(socket_fd < 0)
 	{
-		syslog(Logger::ERROR, "http connect fail");
+		syslog(Logger::ERROR, "http connect fail %s:%d", ip, port);
 		return -3;
 	}
 	
@@ -622,7 +629,7 @@ int Http_client::Http_client_post_file(const char *url, const char *post_str, co
 	socket_fd = Http_client_socket(ip,port);
 	if(socket_fd < 0)
 	{
-		syslog(Logger::ERROR, "http connect fail");
+		syslog(Logger::ERROR, "http connect fail %s:%d", ip, port);
 		return -3;
 	}
 

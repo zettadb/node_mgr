@@ -21,7 +21,7 @@ class Http_server
 {
 public:
 	enum Http_type {HTTP_NONE, HTTP_GET, HTTP_POST};
-	enum Content_type {Content_NONE, Content_form_urlencoded, Content_form_data};
+	enum Content_type {Content_NONE, Application_json, Content_form_urlencoded, Content_form_data};
 	static int do_exit;
 private:
 	static Http_server *m_inst;
@@ -40,7 +40,7 @@ public:
 		if (!m_inst) m_inst = new Http_server();
 		return m_inst;
 	}
-	void start_http_thread();
+	int start_http_thread();
 	void join_all();
 	bool Get_http_path(const char* buf, std::string &path);
 	bool Get_http_range(const char* buf, uint64_t *begin, uint64_t *end);

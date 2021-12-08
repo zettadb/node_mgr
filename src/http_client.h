@@ -11,6 +11,7 @@
 #include <errno.h>
 #include "global.h"
 
+#include <unistd.h>
 #include <pthread.h>
 #include <vector>
 #include <string>

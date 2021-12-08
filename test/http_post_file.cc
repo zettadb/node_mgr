@@ -165,7 +165,7 @@ int Http_client_socket(const char *ip, int port)
  * @retval 
  *	0 : success
  *  -1 : url error
- *  -2 : post_str is to long
+ *  -2 : post_str is too long
  *  -3 : http connect fail
  *  -4 : upload file no find
  *  -5 : upload file open fail
@@ -222,7 +222,7 @@ int Http_client_post_file(const char *url, const char *post_str, const char *fil
 	n += snprintf(http_buf+n, sizeof(http_buf), HTTP_POST_FILE_STR2, post_str, filename.c_str());
 	if(n >= sizeof(http_buf)-1)
 	{
-		printf("post_str %s is to long\n", post_str);
+		printf("post_str %s is too long\n", post_str);
 		close(socket_fd);
 		return -2;
 	}

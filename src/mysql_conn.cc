@@ -9,9 +9,9 @@
 #include <unistd.h>
 
 // config variables
-int64_t mysql_connect_timeout = 20;
-int64_t mysql_read_timeout = 20;
-int64_t mysql_write_timeout = 20;
+int64_t mysql_connect_timeout = 3;
+int64_t mysql_read_timeout = 3;
+int64_t mysql_write_timeout = 3;
 int64_t mysql_max_packet_size = 1024*1024*1024;
 // not configurable for now
 bool mysql_transmit_compress = false;

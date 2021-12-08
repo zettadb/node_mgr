@@ -6,10 +6,11 @@
 */
 
 #include "global.h"
+#include "sys.h"
 #include "log.h"
 #include "cjson.h"
 #include "job.h"
-#include "node_info.h"
+#include "instance_info.h"
 #include "mysql_conn.h"
 #include "pgsql_conn.h"
 #include "http_client.h"
@@ -31,7 +32,7 @@
 #include <unistd.h>
 #include <iostream>
 
-Node_info* Node_info::m_inst = NULL;
+Instance_info* Instance_info::m_inst = NULL;
 
 int64_t pullup_wait_const = 9;
 
@@ -42,18 +43,15 @@ std::string cluster_mgr_http_ip;
 int64_t cluster_mgr_http_port = 0;
 
 extern int64_t thread_work_interval;
-extern std::string mysql_install_path;
-extern std::string pgsql_install_path;
-extern std::string cluster_install_path;
 
-Node::Node(Node_type type_, std::string &ip_, int port_, std::string &user_, std::string &pwd_):
+Instance::Instance(Instance_type type_, std::string &ip_, int port_, std::string &user_, std::string &pwd_):
 	type(type_),ip(ip_),port(port_),user(user_),pwd(pwd_),
 	mysql_conn(NULL),pgsql_conn(NULL),pullup_wait(0)
 {
 
 }
 		
-Node::~Node()
+Instance::~Instance()
 {
 	if(mysql_conn != NULL)
 	{
@@ -65,113 +63,55 @@ Node::~Node()
 	}
 }
 
-Node_info::Node_info()
+Instance_info::Instance_info()
 {
 
 }
 
-Node_info::~Node_info()
+Instance_info::~Instance_info()
 {
-	for (auto &node:vec_meta_node)
-		delete node;
-	vec_meta_node.clear();
-	for (auto &node:vec_storage_node)
-		delete node;
-	vec_storage_node.clear();
-	for (auto &node:vec_computer_node)
-		delete node;
-	vec_computer_node.clear();
+	for (auto &instance:vec_meta_instance)
+		delete instance;
+	vec_meta_instance.clear();
+	for (auto &instance:vec_storage_instance)
+		delete instance;
+	vec_storage_instance.clear();
+	for (auto &instance:vec_computer_instance)
+		delete instance;
+	vec_computer_instance.clear();
 }
 
-void Node_info::start_instance()
+void Instance_info::get_local_instance()
 {
-	get_local_ip();
+	get_meta_instance();
+	get_storage_instance();
+	get_computer_instance();
 }
 
-void Node_info::get_local_ip()
-{
-	int fd, num;
-	struct ifreq ifq[16];
-	struct ifconf ifc;
-
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if(fd < 0)
-	{
-		syslog(Logger::ERROR, "socket failed");
-		return ;
-	}
-	
-	ifc.ifc_len = sizeof(ifq);
-	ifc.ifc_buf = (caddr_t)ifq;
-	if(ioctl(fd, SIOCGIFCONF, (char *)&ifc))
-	{
-		syslog(Logger::ERROR, "ioctl failed\n");
-		close(fd);
-		return ;
-	}
-	num = ifc.ifc_len / sizeof(struct ifreq);
-	if(ioctl(fd, SIOCGIFADDR, (char *)&ifq[num-1]))
-	{
-		syslog(Logger::ERROR, "ioctl failed\n");
-		close(fd);
-		return ;
-	}
-	close(fd);
-
-	for(int i=0; i<num; i++)
-	{
-		char *tmp_ip = inet_ntoa(((struct sockaddr_in*)(&ifq[i].ifr_addr))-> sin_addr);
-		//syslog(Logger::INFO, "tmp_ip=%s", tmp_ip);
-		//if(strcmp(tmp_ip, "127.0.0.1") != 0)
-		{
-			vec_local_ip.push_back(tmp_ip);
-		}
-	}
-
-	//for(auto &ip: vec_local_ip)
-	//	syslog(Logger::INFO, "vec_local_ip=%s", ip.c_str());
-}
-
-bool Node_info::check_local_ip(std::string &ip)
-{
-	for(auto &local_ip: vec_local_ip)
-		if(ip == local_ip)
-			return true;
-	
-	return false;
-}
-
-void Node_info::get_local_node()
-{
-	get_meta_node();
-	get_storage_node();
-	get_computer_node();
-}
-
-void Node_info::get_local_node(cJSON *root)
+void Instance_info::get_local_instance(cJSON *root)
 {
 	cJSON *item;
 	
 	item = cJSON_GetObjectItem(root, "node_type");
 	if(item == NULL)
 	{
-		get_meta_node();
-		get_storage_node();
-		get_computer_node();
+		get_meta_instance();
+		get_storage_instance();
+		get_computer_instance();
 		return;
 	}
 
-	if(strcmp(item->valuestring, "meta_node"))
-		get_meta_node();
-	else if(strcmp(item->valuestring, "storage_node"))
-		get_storage_node();
-	else if(strcmp(item->valuestring, "computer_node"))
-		get_computer_node();
+	if(strcmp(item->valuestring, "meta_instance"))
+		get_meta_instance();
+	else if(strcmp(item->valuestring, "storage_instance"))
+		get_storage_instance();
+	else if(strcmp(item->valuestring, "computer_instance"))
+		get_computer_instance();
 }
 
-int Node_info::get_meta_node()
+int Instance_info::get_meta_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_node_);
+	std::unique_lock<std::mutex> lock(mutex_instance_);
 
 	cJSON *root;
 	cJSON *item;
@@ -179,10 +119,10 @@ int Node_info::get_meta_node()
 	char *cjson;
 	
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "job_type", "get_node");
-	cJSON_AddStringToObject(root, "node_type", "meta_node");
+	cJSON_AddStringToObject(root, "job_type", "get_instance");
+	cJSON_AddStringToObject(root, "node_type", "meta_instance");
 	int ip_count = 0;
-	for(auto &local_ip: vec_local_ip)
+	for(auto &local_ip: Job::get_instance()->vec_local_ip)
 	{
 		std::string node_ip = "node_ip" + std::to_string(ip_count++);
 		cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
@@ -207,14 +147,14 @@ int Node_info::get_meta_node()
 		if(ret_root == NULL)
 			return -5;
 
-		for (auto &node:vec_meta_node)
-			delete node;
-		vec_meta_node.clear();
+		for (auto &instance:vec_meta_instance)
+			delete instance;
+		vec_meta_instance.clear();
 
 		int node_count = 0;
 		while(true)
 		{
-			std::string node_str = "meta_node" + std::to_string(node_count++);
+			std::string node_str = "meta_instance" + std::to_string(node_count++);
 			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
 			if(item == NULL)
 				break;
@@ -244,27 +184,27 @@ int Node_info::get_meta_node()
 				break;
 			pwd = sub_item->valuestring;
 
-			Node *node = new Node(Node::META, ip, port, user, pwd);
-			vec_meta_node.push_back(node);
+			Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
+			vec_meta_instance.push_back(instance);
 
 			MYSQL_CONN *conn = new MYSQL_CONN();
-			node->mysql_conn = conn;
+			instance->mysql_conn = conn;
 		}
 
 	}
 
-	//get the path of meta node
-	for (auto &node:vec_meta_node)
+	//get the path of meta instance
+	for (auto &instance:vec_meta_instance)
 	{
 		int retry = stmt_retries;
-		auto conn = node->mysql_conn;
+		auto conn = instance->mysql_conn;
 		
 		while(retry--)
 		{
-			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
 				continue;
 			}
 			
@@ -275,7 +215,7 @@ int Node_info::get_meta_node()
 			if ((row = mysql_fetch_row(conn->result)))
 			{
 				//syslog(Logger::INFO, "row[]=%s",row[0]);
-				node->path = row[0];
+				instance->path = row[0];
 			}
 			else
 			{
@@ -290,9 +230,9 @@ int Node_info::get_meta_node()
 	return ret;
 }
 
-int Node_info::get_storage_node()
+int Instance_info::get_storage_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_node_);
+	std::unique_lock<std::mutex> lock(mutex_instance_);
 
 	cJSON *root;
 	cJSON *item;
@@ -300,10 +240,10 @@ int Node_info::get_storage_node()
 	char *cjson;
 	
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "job_type", "get_node");
-	cJSON_AddStringToObject(root, "node_type", "storage_node");
+	cJSON_AddStringToObject(root, "job_type", "get_instance");
+	cJSON_AddStringToObject(root, "node_type", "storage_instance");
 	int ip_count = 0;
-	for(auto &local_ip: vec_local_ip)
+	for(auto &local_ip: Job::get_instance()->vec_local_ip)
 	{
 		std::string node_ip = "node_ip" + std::to_string(ip_count++);
 		cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
@@ -328,14 +268,14 @@ int Node_info::get_storage_node()
 		if(ret_root == NULL)
 			return -5;
 
-		for (auto &node:vec_storage_node)
-			delete node;
-		vec_storage_node.clear();
+		for (auto &instance:vec_storage_instance)
+			delete instance;
+		vec_storage_instance.clear();
 
 		int node_count = 0;
 		while(true)
 		{
-			std::string node_str = "storage_node" + std::to_string(node_count++);
+			std::string node_str = "storage_instance" + std::to_string(node_count++);
 			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
 			if(item == NULL)
 				break;
@@ -365,36 +305,36 @@ int Node_info::get_storage_node()
 				break;
 			pwd = sub_item->valuestring;
 
-			Node *node = new Node(Node::STORAGE, ip, port, user, pwd);
-			vec_storage_node.push_back(node);
+			Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
+			vec_storage_instance.push_back(instance);
 
 			sub_item = cJSON_GetObjectItem(item, "cluster");
 			if(sub_item == NULL)
 				break;
-			node->cluster = sub_item->valuestring;
+			instance->cluster = sub_item->valuestring;
 
 			sub_item = cJSON_GetObjectItem(item, "shard");
 			if(sub_item == NULL)
 				break;
-			node->shard = sub_item->valuestring;
+			instance->shard = sub_item->valuestring;
 
 			MYSQL_CONN *conn = new MYSQL_CONN();
-			node->mysql_conn = conn;
+			instance->mysql_conn = conn;
 		}
 	}
 
-	//get the path of storage node
-	for (auto &node:vec_storage_node)
+	//get the path of storage instance
+	for (auto &instance:vec_storage_instance)
 	{
 		int retry = stmt_retries;
-		auto conn = node->mysql_conn;
+		auto conn = instance->mysql_conn;
 		
 		while(retry--)
 		{
-			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
 				continue;
 			}
 			
@@ -405,7 +345,7 @@ int Node_info::get_storage_node()
 			if ((row = mysql_fetch_row(conn->result)))
 			{
 				//syslog(Logger::INFO, "row[]=%s",row[0]);
-				node->path = row[0];
+				instance->path = row[0];
 			}
 			else
 			{
@@ -420,9 +360,9 @@ int Node_info::get_storage_node()
 	return ret;
 }
 
-int Node_info::get_computer_node()
+int Instance_info::get_computer_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_node_);
+	std::unique_lock<std::mutex> lock(mutex_instance_);
 
 	cJSON *root;
 	cJSON *item;
@@ -430,10 +370,10 @@ int Node_info::get_computer_node()
 	char *cjson;
 	
 	root = cJSON_CreateObject();
-	cJSON_AddStringToObject(root, "job_type", "get_node");
-	cJSON_AddStringToObject(root, "node_type", "computer_node");
+	cJSON_AddStringToObject(root, "job_type", "get_instance");
+	cJSON_AddStringToObject(root, "node_type", "computer_instance");
 	int ip_count = 0;
-	for(auto &local_ip: vec_local_ip)
+	for(auto &local_ip: Job::get_instance()->vec_local_ip)
 	{
 		std::string node_ip = "node_ip" + std::to_string(ip_count++);
 		cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
@@ -458,14 +398,14 @@ int Node_info::get_computer_node()
 		if(ret_root == NULL)
 			return -5;
 
-		for (auto &node:vec_computer_node)
-			delete node;
-		vec_computer_node.clear();
+		for (auto &instance:vec_computer_instance)
+			delete instance;
+		vec_computer_instance.clear();
 
 		int node_count = 0;
 		while(true)
 		{
-			std::string node_str = "computer_node" + std::to_string(node_count++);
+			std::string node_str = "computer_instance" + std::to_string(node_count++);
 			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
 			if(item == NULL)
 				break;
@@ -495,31 +435,31 @@ int Node_info::get_computer_node()
 				break;
 			pwd = sub_item->valuestring;
 
-			Node *node = new Node(Node::COMPUTER, ip, port, user, pwd);
-			vec_computer_node.push_back(node);
+			Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
+			vec_computer_instance.push_back(instance);
 
 			sub_item = cJSON_GetObjectItem(item, "cluster");
 			if(sub_item == NULL)
 				break;
-			node->cluster = sub_item->valuestring;
+			instance->cluster = sub_item->valuestring;
 
 			PGSQL_CONN *conn = new PGSQL_CONN();
-			node->pgsql_conn = conn;
+			instance->pgsql_conn = conn;
 		}
 	}
 
-	//get the path of computer node
-	for (auto &node:vec_computer_node)
+	//get the path of computer instance
+	for (auto &instance:vec_computer_instance)
 	{
 		int retry = stmt_retries;
-		auto conn = node->pgsql_conn;
+		auto conn = instance->pgsql_conn;
 		
 		while(retry--)
 		{
-			if(conn->connect("postgres", node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect("postgres", instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
-								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
 				continue;
 			}
 		
@@ -529,7 +469,7 @@ int Node_info::get_computer_node()
 			if(PQntuples(conn->result) == 1)
 			{
 				//syslog(Logger::INFO, "presult = %s", PQgetvalue(conn->result,0,0));
-				node->path = PQgetvalue(conn->result,0,0);
+				instance->path = PQgetvalue(conn->result,0,0);
 			}
 			
 			break;
@@ -540,46 +480,46 @@ int Node_info::get_computer_node()
 	return ret;
 }
 
-void Node_info::set_auto_pullup(int seconds, int port)
+void Instance_info::set_auto_pullup(int seconds, int port)
 {
-	std::unique_lock<std::mutex> lock(mutex_node_);
+	std::unique_lock<std::mutex> lock(mutex_instance_);
 
 	if(port<=0)		//done on all of the port
 	{
-		for (auto &node:vec_meta_node)
-			node->pullup_wait = seconds;
+		for (auto &instance:vec_meta_instance)
+			instance->pullup_wait = seconds;
 
-		for (auto &node:vec_storage_node)
-			node->pullup_wait = seconds;
+		for (auto &instance:vec_storage_instance)
+			instance->pullup_wait = seconds;
 
-		for (auto &node:vec_computer_node)
-			node->pullup_wait = seconds;
+		for (auto &instance:vec_computer_instance)
+			instance->pullup_wait = seconds;
 	}
-	else	//find the node compare by port
+	else	//find the instance compare by port
 	{
-		for (auto &node:vec_meta_node)
+		for (auto &instance:vec_meta_instance)
 		{
-			if(node->port == port)
+			if(instance->port == port)
 			{
-				node->pullup_wait = seconds;
+				instance->pullup_wait = seconds;
 				return;
 			}
 		}
 
-		for (auto &node:vec_storage_node)
+		for (auto &instance:vec_storage_instance)
 		{
-			if(node->port == port)
+			if(instance->port == port)
 			{
-				node->pullup_wait = seconds;
+				instance->pullup_wait = seconds;
 				return;
 			}
 		}
 
-		for (auto &node:vec_computer_node)
+		for (auto &instance:vec_computer_instance)
 		{
-			if(node->port == port)
+			if(instance->port == port)
 			{
-				node->pullup_wait = seconds;
+				instance->pullup_wait = seconds;
 				return;
 			}
 		}
@@ -587,33 +527,33 @@ void Node_info::set_auto_pullup(int seconds, int port)
 	
 }
 
-void Node_info::keepalive_nodes()
+void Instance_info::keepalive_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_node_);
-
+	std::unique_lock<std::mutex> lock(mutex_instance_);
+#if 0
 	/////////////////////////////////////////////////////////////
 	// keep alive of meta
-	for (auto &node:vec_meta_node)
+	for (auto &instance:vec_meta_instance)
 	{
-		if(node->pullup_wait<0)
+		if(instance->pullup_wait<0)
 			continue;
-		else if(node->pullup_wait>0)
+		else if(instance->pullup_wait>0)
 		{
-			node->pullup_wait -= thread_work_interval;
-			if(node->pullup_wait<0)
-				node->pullup_wait = 0;
+			instance->pullup_wait -= thread_work_interval;
+			if(instance->pullup_wait<0)
+				instance->pullup_wait = 0;
 			continue;
 		}
 	
 		int retry = stmt_retries;
-		auto conn = node->mysql_conn;
+		auto conn = instance->mysql_conn;
 		
 		while(retry--)
 		{
-			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
 				continue;
 			}
 			
@@ -638,10 +578,10 @@ void Node_info::keepalive_nodes()
 
 		if(retry<0)
 		{
-			syslog(Logger::ERROR, "meta_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
-			node->pullup_wait = pullup_wait_const;
+			syslog(Logger::ERROR, "meta_instance ip=%s, port=%d, retry=%d",instance->ip.c_str(),instance->port,retry);
+			instance->pullup_wait = pullup_wait_const;
 
-			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(node->port);
+			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(instance->port);
 			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
 			//system(cmd.c_str());
 			
@@ -649,7 +589,7 @@ void Node_info::keepalive_nodes()
 			pfd = popen(cmd.c_str(), "r");
 			if(!pfd)
 			{
-				syslog(Logger::ERROR, "pullup node error %s" ,cmd.c_str());
+				syslog(Logger::ERROR, "pullup instance error %s" ,cmd.c_str());
 				return;
 			}
 			pclose(pfd);
@@ -658,27 +598,27 @@ void Node_info::keepalive_nodes()
 
 	/////////////////////////////////////////////////////////////
 	// keep alive of storage
-	for (auto &node:vec_storage_node)
+	for (auto &instance:vec_storage_instance)
 	{
-		if(node->pullup_wait<0)
+		if(instance->pullup_wait<0)
 			continue;
-		else if(node->pullup_wait>0)
+		else if(instance->pullup_wait>0)
 		{
-			node->pullup_wait -= thread_work_interval;
-			if(node->pullup_wait<0)
-				node->pullup_wait = 0;
+			instance->pullup_wait -= thread_work_interval;
+			if(instance->pullup_wait<0)
+				instance->pullup_wait = 0;
 			continue;
 		}
 	
 		int retry = stmt_retries;
-		auto conn = node->mysql_conn;
+		auto conn = instance->mysql_conn;
 		
 		while(retry--)
 		{
-			if(conn->connect(NULL, node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
 				continue;
 			}
 			
@@ -703,10 +643,10 @@ void Node_info::keepalive_nodes()
 
 		if(retry<0)
 		{
-			syslog(Logger::ERROR, "storage_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
-			node->pullup_wait = pullup_wait_const;
+			syslog(Logger::ERROR, "storage_instance ip=%s, port=%d, retry=%d",instance->ip.c_str(),instance->port,retry);
+			instance->pullup_wait = pullup_wait_const;
 
-			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(node->port);
+			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(instance->port);
 			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
 			//system(cmd.c_str());
 			
@@ -714,7 +654,7 @@ void Node_info::keepalive_nodes()
 			pfd = popen(cmd.c_str(), "r");
 			if(!pfd)
 			{
-				syslog(Logger::ERROR, "pullup node error %s" ,cmd.c_str());
+				syslog(Logger::ERROR, "pullup instance error %s" ,cmd.c_str());
 				return;
 			}
 			pclose(pfd);
@@ -723,27 +663,27 @@ void Node_info::keepalive_nodes()
 
 	/////////////////////////////////////////////////////////////
 	// keep alive of computer
-	for (auto &node:vec_computer_node)
+	for (auto &instance:vec_computer_instance)
 	{
-		if(node->pullup_wait<0)
+		if(instance->pullup_wait<0)
 			continue;
-		else if(node->pullup_wait>0)
+		else if(instance->pullup_wait>0)
 		{
-			node->pullup_wait -= thread_work_interval;
-			if(node->pullup_wait<0)
-				node->pullup_wait = 0;
+			instance->pullup_wait -= thread_work_interval;
+			if(instance->pullup_wait<0)
+				instance->pullup_wait = 0;
 			continue;
 		}
 
 		int retry = stmt_retries;
-		auto conn = node->pgsql_conn;
+		auto conn = instance->pgsql_conn;
 		
 		while(retry--)
 		{
-			if(conn->connect("postgres", node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str()))
+			if(conn->connect("postgres", instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
 			{
 				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
-								node->ip.c_str(), node->port, node->user.c_str(), node->pwd.c_str());
+								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
 				continue;
 			}
 		
@@ -763,10 +703,10 @@ void Node_info::keepalive_nodes()
 
 		if(retry<0)
 		{
-			syslog(Logger::ERROR, "computer_node ip=%s, port=%d, retry=%d",node->ip.c_str(),node->port,retry);
-			node->pullup_wait = pullup_wait_const;
+			syslog(Logger::ERROR, "computer_instance ip=%s, port=%d, retry=%d",instance->ip.c_str(),instance->port,retry);
+			instance->pullup_wait = pullup_wait_const;
 
-			std::string cmd = "cd " + pgsql_install_path + ";python2 start_pg.py port=" + std::to_string(node->port);
+			std::string cmd = "cd " + pgsql_install_path + ";python2 start_pg.py port=" + std::to_string(instance->port);
 			syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
 			//system(cmd.c_str());
 			
@@ -774,12 +714,66 @@ void Node_info::keepalive_nodes()
 			pfd = popen(cmd.c_str(), "r");
 			if(!pfd)
 			{
-				syslog(Logger::ERROR, "pullup node error %s" ,cmd.c_str());
+				syslog(Logger::ERROR, "pullup instance error %s" ,cmd.c_str());
 				return;
 			}
 			pclose(pfd);
 		}
 	}
+#endif
+}
 
+void Instance_info::trimString(std::string &str)
+{
+    int s = str.find_first_not_of(" ");
+    int e = str.find_last_not_of(" ");
+	if(s>=e)
+		str = "";
+	else
+    	str = str.substr(s,e-s+1);
+}
+
+void Instance_info::set_path_space(char* paths)
+{
+	char *cStart, *cEnd;
+	std::string path;
+
+	vec_path_space.clear();
+
+	cStart = paths;
+	while(*cStart!='\0')
+	{
+		cEnd = strchr(cStart, ';');
+		if(cEnd == NULL)
+		{
+			path = std::string(cStart, strlen(cStart));
+			trimString(path);
+			if(path.length())
+				vec_path_space.push_back(std::make_pair(path, 0));
+			break;
+		}
+		else
+		{
+			path = std::string(cStart, cEnd-cStart);
+			trimString(path);
+			if(path.length())
+				vec_path_space.push_back(std::make_pair(path, 0));
+			cStart = cEnd+1;
+		}
+	}
+
+	for(auto it=vec_path_space.begin(); it!=vec_path_space.end(); )
+	{
+		uint64_t used,free;
+		if(Job::get_instance()->get_path_size((*it).first, used, free))
+		{
+			(*it).second = free;
+			it++;
+		}
+		else
+		{
+			it = vec_path_space.erase(it);
+		}
+	}
 }
 

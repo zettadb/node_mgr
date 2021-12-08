@@ -11,7 +11,7 @@
 #include "os.h"
 #include "log.h"
 #include "config.h"
-#include "node_info.h"
+#include "instance_info.h"
 #include "thread_manager.h"
 #include <unistd.h>
 #include <signal.h>
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 
 	while (!Thread_manager::do_exit)
 	{
-		Node_info::get_instance()->keepalive_nodes();
+		Instance_info::get_instance()->keepalive_instance();
 		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 1000);
 	}
 

@@ -1,11 +1,11 @@
 # MySQL client connection timeout in seconds
-mysql_connect_timeout = 20
+mysql_connect_timeout = 3
 
 # MySQL client read timeout in seconds
-mysql_read_timeout = 20
+mysql_read_timeout = 3
 
 # MySQL client write timeout in seconds
-mysql_write_timeout = 20
+mysql_write_timeout = 3
 
 # MySQL client max packet size in bytes.
 mysql_max_packet_size = 1073741824
@@ -39,36 +39,45 @@ num_job_threads=3
 # Number of http threads to create.
 num_http_threads=3
 
-# http server listen port.
-http_server_port=9998
-
 # http web path
 http_web_path = ./web
 
 # http upload path
 http_upload_path = ./upload
 
-# cluster_mgr http server port 
-cluster_mgr_http_port = 9999
-
 # cluster_mgr http server ip address
-cluster_mgr_http_ip = 192.168.207.145
+cluster_mgr_http_ip = 127.0.0.1
 
-# percona install path
-mysql_install_path = ../../percona-8.0.18-bin-rel/dba_tools
+# cluster_mgr http server port
+cluster_mgr_http_port = 5000
 
-# postgresql release path
-pgsql_install_path = ../../postgresql-11.5-rel/scripts
-
-# cluster_mgr release path
-cluster_install_path = ../../cluster_mgr_rel
+# node_mgr http server port
+node_mgr_http_port = 5001
 
 # hdfs server port 
-hdfs_server_port = 9000
+hdfs_server_port = 5002
 
 # hdfs server ip address
 hdfs_server_ip = 192.168.0.127
 
 # hdfs save replication
 hdfs_replication = 2
+
+# program_binaries_path
+program_binaries_path = ../../../program_binaries
+
+# instance_binaries_path
+instance_binaries_path = ../../../instance_binaries
+
+# storage_prog_package_name
+storage_prog_package_name = percona-8.0.18-bin-rel
+
+# computer_prog_package_name
+computer_prog_package_name = postgresql-11.5-rel
+
+# storage instance port start
+storage_instance_port_start = 6010
+
+# computer instance port start
+computer_instance_port_start = 5010
 
