@@ -29,19 +29,15 @@ extern int64_t num_http_threads;
 extern int64_t node_mgr_http_port;
 extern std::string http_web_path;
 extern std::string http_upload_path;
+extern std::string http_cmd_version;
 
 extern std::string cluster_mgr_http_ip;
 extern int64_t cluster_mgr_http_port;
-std::string hdfs_server_ip;
-int64_t hdfs_server_port;
-int64_t hdfs_replication;
 
 extern std::string program_binaries_path;
 extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
-extern int64_t storage_instance_port_start;
-extern int64_t computer_instance_port_start;
 
 Configs *Configs::get_instance()
 {
@@ -208,9 +204,9 @@ void Configs::define_configs()
 	define_str_config("log_file", log_file_path, def_log_path,
 		"log file path");
 
-	define_str_config("http_web_path", http_web_path, "../web",
+	define_str_config("http_web_path", http_web_path, "./web",
 		"http_web_path");
-	define_str_config("http_upload_path", http_upload_path, "../upload",
+	define_str_config("http_upload_path", http_upload_path, "./upload",
 		"http_upload_path");
 
 	define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 0, 65535, 5000,
@@ -218,12 +214,8 @@ void Configs::define_configs()
 	define_str_config("cluster_mgr_http_ip", cluster_mgr_http_ip, "localhost",
 		"cluster_mgr_http_ip");
 
-	define_int_config("hdfs_server_port", hdfs_server_port, 0, 65535, 0,
-		"hdfs_server_port");
-	define_str_config("hdfs_server_ip", hdfs_server_ip, "localhost",
-		"hdfs_server_ip");
-	define_int_config("hdfs_replication", hdfs_replication, 0, 65535, 2,
-		"hdfs_replication");
+	define_str_config("http_cmd_version", http_cmd_version, "0.1",
+		"http_cmd_version");
 
 	define_str_config("program_binaries_path", program_binaries_path, "../../../program_binaries",
 		"program_binaries_path");
@@ -233,11 +225,6 @@ void Configs::define_configs()
 		"storage_prog_package_name");
 	define_str_config("computer_prog_package_name", computer_prog_package_name, "postgresql-11.5-rel",
 		"computer_prog_package_name");
-
-	define_int_config("storage_instance_port_start", storage_instance_port_start, 0, 6010, 0,
-		"storage_instance_port_start");
-	define_int_config("computer_instance_port_start", computer_instance_port_start, 0, 5010, 0,
-		"computer_instance_port_start");
 
 
 	/*

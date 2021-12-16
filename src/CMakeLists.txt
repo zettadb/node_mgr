@@ -34,6 +34,7 @@ if (NOT EXISTS ../include/hdfs)
 endif()
 
 link_directories(${CMAKE_SOURCE_DIR}/../lib)
+link_directories(${CMAKE_SOURCE_DIR}/../lib/deps)
 add_executable(node_mgr
 config.cc log.cc main.cc os.cc sys.cc thread_manager.cc mysql_conn.cc pgsql_conn.cc instance_info.cc 
 http_server.cc http_client.cc job.cc cjson.cc)

@@ -26,13 +26,14 @@
 #include <netdb.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-#include <dirent.h>
 
 Job* Job::m_inst = NULL;
 int Job::do_exit = 0;
 
 int64_t num_job_threads = 3;
+std::string http_cmd_version;
 
+extern int64_t cluster_mgr_http_port;
 extern int64_t node_mgr_http_port;
 extern std::string http_upload_path;
 extern int64_t stmt_retries;
@@ -42,8 +43,6 @@ std::string program_binaries_path;
 std::string instance_binaries_path;
 std::string storage_prog_package_name;
 std::string computer_prog_package_name;
-int64_t storage_instance_port_start;
-int64_t computer_instance_port_start;
 
 extern "C" void *thread_func_job_work(void*thrdarg);
 
@@ -173,21 +172,21 @@ bool Job::http_para_cmd(const std::string &para, std::string &str_ret)
 	{
 		ret = get_node_instance(root, str_ret);
 	}
-	else if(job_type == JOB_GET_INFO)
-	{
-		ret = get_node_info(root, str_ret);
-	}
 	else if(job_type == JOB_GET_STATUS)
 	{
 		ret = get_job_status(root, str_ret);
+	}
+	else if(job_type == JOB_GET_INFO)
+	{
+		ret = get_node_info(root, str_ret);
 	}
 	else if(job_type == JOB_GET_DISK_SIZE)
 	{
 		ret = get_disk_size(root, str_ret);
 	}
-	else if(job_type == JOB_GET_SPACE_PORT)
+	else if(job_type == JOB_GET_PATH_SPACE)
 	{
-		ret = get_space_port(root, str_ret);
+		ret = get_path_space(root, str_ret);
 	}
 	else if(job_type == JOB_AUTO_PULLUP)
 	{
@@ -201,6 +200,38 @@ end:
 		cJSON_Delete(root);
 
 	return ret;
+}
+
+bool Job::get_job_status(cJSON *root, std::string &str_ret)
+{
+	std::string job_id, result, info;
+
+	cJSON *item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return false;
+	}
+	job_id = item->valuestring;
+	
+	if(!Job::get_instance()->get_jobid_status(job_id, result, info))
+		str_ret = "{\"result\":\"error\",\"info\":\"job id no find\"}";
+	else
+	{
+		cJSON *root;
+		char *cjson;
+
+		root = cJSON_CreateObject();
+		cJSON_AddStringToObject(root, "result", result.c_str());
+		cJSON_AddStringToObject(root, "info", info.c_str());
+
+		cjson = cJSON_Print(root);
+		str_ret = cjson;
+		cJSON_Delete(root);
+		free(cjson);
+	}
+
+	return true;
 }
 
 bool Job::get_node_instance(cJSON *root, std::string &str_ret)
@@ -506,42 +537,6 @@ bool Job::set_auto_pullup(cJSON *root, std::string &str_ret)
 	return true;
 }
 
-bool Job::get_job_status(cJSON *root, std::string &str_ret)
-{
-	std::string job_id;
-	std::string job_status;
-
-	cJSON *item;
-	cJSON *ret_root;
-	cJSON *ret_item;
-	char *ret_cjson;
-
-	item = cJSON_GetObjectItem(root, "job_id");
-	if(item == NULL)
-	{
-		syslog(Logger::ERROR, "get_job_id error");
-		return false;
-	}
-	job_id = item->valuestring;
-	
-	if(!Job::get_instance()->get_jobid_status(job_id, job_status))
-		job_status = "none";
-
-	ret_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(ret_root, "job_id", job_id.c_str());
-	cJSON_AddStringToObject(ret_root, "job_status", job_status.c_str());
-
-	ret_cjson = cJSON_Print(ret_root);
-	str_ret = ret_cjson;
-	
-	if(ret_root != NULL)
-		cJSON_Delete(ret_root);
-	if(ret_cjson != NULL)
-		free(ret_cjson);
-
-	return true;
-}
-
 bool Job::get_disk_size(cJSON *root, std::string &str_ret)
 {
 	cJSON *item;
@@ -579,13 +574,9 @@ bool Job::get_disk_size(cJSON *root, std::string &str_ret)
 	return false;
 }
 
-bool Job::get_space_port(cJSON *root, std::string &str_ret)
+bool Job::get_path_space(cJSON *root, std::string &str_ret)
 {
 	cJSON *item;
-	int port_computer = 0;
-	int port_storage = 0;
-	int instance_computer = 0;
-	int instance_storage = 0;
 	std::string instance_binaries;
 
 	item = cJSON_GetObjectItem(root, "paths");
@@ -602,38 +593,12 @@ bool Job::get_space_port(cJSON *root, std::string &str_ret)
 	//syslog(Logger::INFO, "vec_path_space.size()=%d", Instance_info::get_instance()->vec_path_space.size());
 
 	////////////////////////////////////////////////////////////
-	//get port_computer
-	instance_binaries = instance_binaries_path + "/computer";
-	get_max_port_instance(instance_binaries, port_computer, instance_computer);
-	if(port_computer < computer_instance_port_start)
-		port_computer = computer_instance_port_start;
-	else
-		port_computer += 1;
-
-	//syslog(Logger::INFO, "get port_computer %d", port_computer);
-	
-	////////////////////////////////////////////////////////////
-	//get port_storage
-	instance_binaries = instance_binaries_path + "/storage";
-	get_max_port_instance(instance_binaries, port_storage, instance_storage);
-	if(port_storage < storage_instance_port_start)
-		port_storage = storage_instance_port_start;
-	else
-		port_storage += 3;
-
-	//syslog(Logger::INFO, "get port_storage %d", port_storage);
-
-	////////////////////////////////////////////////////////////
 	cJSON *ret_root;
 	char *ret_cjson;
 	cJSON *ret_item_spaces;
 	cJSON *ret_item_sub;
 	
 	ret_root = cJSON_CreateObject();
-	cJSON_AddNumberToObject(ret_root, "port_computer", port_computer);
-	cJSON_AddNumberToObject(ret_root, "port_storage", port_storage);
-	cJSON_AddNumberToObject(ret_root, "instance_computer", instance_computer);
-	cJSON_AddNumberToObject(ret_root, "instance_storage", instance_storage);
 
 	ret_item_spaces = cJSON_CreateArray();
 	cJSON_AddItemToObject(ret_root, "spaces", ret_item_spaces);
@@ -657,79 +622,51 @@ bool Job::get_space_port(cJSON *root, std::string &str_ret)
 	return true;
 }
 
-bool Job::get_max_port_instance(std::string &path, int &port, int &instance)
-{
-	bool ret = false;
-	int port_dir = 0;
-	
-    DIR *dir;
-    struct dirent *entry;
-
-	dir = opendir(path.c_str());
-    if(dir == NULL)
-	{
-        syslog(Logger::ERROR,"cannot open directory: %s", path.c_str());
-        return false;
-    }
-
-    while((entry = readdir(dir)) != NULL)
-	{
-		if(entry->d_type == 4)
-		{
-			// skip system dir
-			if(strcmp(".",entry->d_name) == 0 || strcmp("..",entry->d_name) == 0)
-                continue;
-
-			// must be digit
-			bool is_digit = true;
-			char *p = entry->d_name;
-			while(*p != '\0')
-			{
-				if(*p < '0' || *p > '9')
-				{
-					is_digit = false;
-					break;
-				}
-				p++;
-			}
-
-			// dir to port 
-			if(is_digit)
-			{
-				instance++;
-				port_dir = atoi(entry->d_name);
-
-				if(port_dir > port)
-					port = port_dir;
-			}
-		}
-    }
-    closedir(dir);
-
-	return ret;
-}
-
 bool Job::get_path_size(std::string &path, std::string &used, std::string &free)
 {
 	bool ret = false;
-	FILE* pfd;
+	FILE* pfd = NULL;
 
 	char *p, *q;
 	char buf[256];
 	std::string str_cmd;
 
+	str_cmd = "du -h --max-depth=0 " + path;
+	syslog(Logger::INFO, "get_path_size str_cmd : %s",str_cmd.c_str());
+
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	p = strchr(buf, 0x09);	//asii ht
+	if(p != NULL)
+		*p = '\0';
+	else
+	{
+		char* p = strchr(buf, 0x20);	//space
+		if(p != NULL)
+			*p = '\0';
+		else
+			goto end;
+	}
+
+	used = buf;
+		
+	pclose(pfd);
+	pfd = NULL;
+
 	str_cmd = "df -h " + path;
 	syslog(Logger::INFO, "get_path_size str_cmd : %s",str_cmd.c_str());
-	
+
 	pfd = popen(str_cmd.c_str(), "r");
     if(!pfd)
         goto end;
 
 	//first line
 	if(fgets(buf, 256, pfd) == NULL)
-		goto end;
-
-	if(strstr(buf, "No such file or directory") != NULL)
 		goto end;
 
 	//second line
@@ -753,16 +690,10 @@ bool Job::get_path_size(std::string &path, std::string &used, std::string &free)
 		p++;
 
 	//third space
-	q = strchr(p, 0x20);
-	if(q == NULL)
+	p = strchr(p, 0x20);
+	if(p == NULL)
 		goto end;
 
-	*q = '\0';
-
-	used = p;
-
-	p = q+1;
-	
 	while(*p == 0x20)
 		p++;
 
@@ -787,24 +718,48 @@ end:
 bool Job::get_path_size(std::string &path, uint64_t &used, uint64_t &free)
 {
 	bool ret = false;
-	FILE* pfd;
+	FILE* pfd = NULL;
 
 	char *p, *q;
 	char buf[256];
 	std::string str_cmd;
 
-	str_cmd = "df " + path;
+	str_cmd = "du --max-depth=0 " + path;
 	syslog(Logger::INFO, "get_path_size str_cmd : %s",str_cmd.c_str());
-	
-	pfd = popen(str_cmd.c_str(), "r");
-	if(!pfd)
-		goto end;
 
-	//first line
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
 	if(fgets(buf, 256, pfd) == NULL)
 		goto end;
 
-	if(strstr(buf, "No such file or directory") != NULL)
+	p = strchr(buf, 0x09);	//asii ht
+	if(p != NULL)
+		*p = '\0';
+	else
+	{
+		char* p = strchr(buf, 0x20);	//space
+		if(p != NULL)
+			*p = '\0';
+		else
+			goto end;
+	}
+
+	used = atol(buf)>>20;
+		
+	pclose(pfd);
+	pfd = NULL;
+
+	str_cmd = "df " + path;
+	syslog(Logger::INFO, "get_path_size str_cmd : %s",str_cmd.c_str());
+
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
+	//first line
+	if(fgets(buf, 256, pfd) == NULL)
 		goto end;
 
 	//second line
@@ -828,16 +783,10 @@ bool Job::get_path_size(std::string &path, uint64_t &used, uint64_t &free)
 		p++;
 
 	//third space
-	q = strchr(p, 0x20);
-	if(q == NULL)
+	p = strchr(p, 0x20);
+	if(p == NULL)
 		goto end;
 
-	*q = '\0';
-
-	used = atol(p)>>20;
-
-	p = q+1;
-	
 	while(*p == 0x20)
 		p++;
 
@@ -1029,10 +978,31 @@ bool Job::get_uuid(std::string &uuid)
 
 	char buf[60];
 	memset(buf, 0, 60);
-	fread(buf, 1, 36, fp);
+	size_t n = fread(buf, 1, 36, fp);
 	fclose(fp);
-	uuid = buf;
 	
+	if(n != 36)
+		return false;
+	
+	uuid = buf;
+	return true;
+}
+
+bool Job::get_timestamp(std::string &timestamp)
+{
+	char sysTime[128];
+	struct timespec ts = {0,0};
+	clock_gettime(CLOCK_REALTIME, &ts);
+
+	struct tm *tm;
+	tm = localtime(&ts.tv_sec);
+		 
+	snprintf(sysTime, 128, "%04u-%02u-%02u %02u:%02u:%02u", 
+		tm->tm_year+1900, tm->tm_mon+1,	tm->tm_mday, 
+		tm->tm_hour, tm->tm_min, tm->tm_sec); 
+
+	timestamp = sysTime;
+
 	return true;
 }
 
@@ -1056,8 +1026,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_STATUS;
 	else if(strcmp(str, "get_disk_size")==0)
 		job_type = JOB_GET_DISK_SIZE;
-	else if(strcmp(str, "get_space_port")==0)
-		job_type = JOB_GET_SPACE_PORT;
+	else if(strcmp(str, "get_path_space")==0)
+		job_type = JOB_GET_PATH_SPACE;
 	else if(strcmp(str, "auto_pullup")==0)
 		job_type = JOB_AUTO_PULLUP;
 	else if(strcmp(str, "coldbackup")==0)
@@ -1068,8 +1038,14 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_INSTALL_STORAGE;
 	else if(strcmp(str, "install_computer")==0)
 		job_type = JOB_INSTALL_COMPUTER;
-	else if(strcmp(str, "start_cluster")==0)
-		job_type = JOB_START_CLUSTER;
+	else if(strcmp(str, "delete_storage")==0)
+		job_type = JOB_DELETE_STORAGE;
+	else if(strcmp(str, "delete_computer")==0)
+		job_type = JOB_DELETE_COMPUTER;
+	else if(strcmp(str, "backup_shard")==0)
+		job_type = JOB_BACKUP_SHARD;
+	else if(strcmp(str, "restore_shard")==0)
+		job_type = JOB_RESTORE_SHARD;
 	else
 	{
 		job_type = JOB_NONE;
@@ -1089,6 +1065,51 @@ bool Job::get_file_type(char *str, File_type &file_type)
 		file_type = FILE_NONE;
 
 	return true;
+}
+
+bool Job::update_jobid_status(std::string &jobid, std::string &result, std::string &info)
+{
+	std::unique_lock<std::mutex> lock(mutex_stauts_);
+
+	if(list_jobid_result_info.size()>=kMaxStatus)
+		list_jobid_result_info.pop_back();
+
+	bool is_exist = false;
+	for (auto it = list_jobid_result_info.begin(); it != list_jobid_result_info.end(); ++it)
+	{
+		if(std::get<0>(*it) == jobid)
+		{
+			std::get<1>(*it) = result;
+			std::get<0>(*it) = info;
+			is_exist = true;
+			break;
+		}
+	}
+
+	if(!is_exist)
+		list_jobid_result_info.push_front(std::make_tuple(jobid, result, info));
+
+	return true;
+}
+
+bool Job::get_jobid_status(std::string &jobid, std::string &result, std::string &info)
+{
+	std::unique_lock<std::mutex> lock(mutex_stauts_);
+
+	bool ret = false;
+	for (auto it = list_jobid_result_info.begin(); it != list_jobid_result_info.end(); ++it)
+	{
+		if(std::get<0>(*it) == jobid)
+		{
+			result = std::get<1>(*it).c_str();
+			info = std::get<2>(*it).c_str();
+
+			ret = true;
+			break;
+		}
+	}
+
+	return ret;
 }
 
 bool Job::get_table_path(std::string &ip, int port, std::string &user, std::string &psw, 
@@ -1386,48 +1407,6 @@ bool Job::get_file_path(std::string &jobid, std::string &path)
 		if(it->first == jobid)
 		{
 			path = it->second;
-			ret = true;
-			break;
-		}
-	}
-
-	return ret;
-}
-
-bool Job::update_jobid_status(std::string &jobid, std::string &status)
-{
-	std::unique_lock<std::mutex> lock(mutex_stauts_);
-
-	if(list_jobid_status.size()>=kMaxStatus)
-		list_jobid_status.pop_back();
-
-	bool is_exist = false;
-	for (auto it = list_jobid_status.begin(); it != list_jobid_status.end(); ++it)
-	{
-		if(it->first == jobid)
-		{
-			it->second = status;
-			is_exist = true;
-			break;
-		}
-	}
-
-	if(!is_exist)
-		list_jobid_status.push_front(std::make_pair(jobid, status));
-
-	return true;
-}
-
-bool Job::get_jobid_status(std::string &jobid, std::string &status)
-{
-	std::unique_lock<std::mutex> lock(mutex_stauts_);
-	
-	bool ret = false;
-	for (auto it = list_jobid_status.begin(); it != list_jobid_status.end(); ++it)
-	{
-		if(it->first == jobid)
-		{
-			status = it->second;
 			ret = true;
 			break;
 		}
@@ -1799,6 +1778,7 @@ void Job::job_recv(cJSON *root)
 
 void Job::job_cold_backup(cJSON *root)
 {
+#if 0	
 	std::string job_id;
 	std::string job_status;
 
@@ -1851,7 +1831,7 @@ void Job::job_cold_backup(cJSON *root)
 
 	if(!check_local_ip(ip))
 	{
-		job_status = ip + " is no local_ip";
+		job_status = ip + " is not local ip, error";
 		goto end;
 	}
 	
@@ -1971,10 +1951,12 @@ void Job::job_cold_backup(cJSON *root)
 end:
 	update_jobid_status(job_id, job_status);
 	syslog(Logger::ERROR, "%s", job_status.c_str());
+#endif
 }
 
 void Job::job_cold_restore(cJSON *root)
 {
+#if 0
 	std::string job_id;
 	std::string job_status;
 
@@ -2027,7 +2009,7 @@ void Job::job_cold_restore(cJSON *root)
 
 	if(!check_local_ip(ip))
 	{
-		job_status = ip + " is no local_ip";
+		job_status = ip + " is not local ip, error";
 		goto end;
 	}
 	
@@ -2114,12 +2096,81 @@ void Job::job_cold_restore(cJSON *root)
 end:
 	update_jobid_status(job_id, job_status);
 	syslog(Logger::ERROR, "%s", job_status.c_str());
+#endif
+}
+
+bool Job::job_system_cmd(std::string &cmd)
+{
+	FILE* pfd;
+	char* line;
+	char buf[256];
+
+	syslog(Logger::INFO, "system cmd %s" ,cmd.c_str());
+
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "system cmd error %s" ,cmd.c_str());
+		return false;
+	}
+	memset(buf, 0, 256);
+	line = fgets(buf, 256, pfd);
+	pclose(pfd);
+
+	if(strlen(buf))
+	{
+		syslog(Logger::ERROR, "system cmd error %s, %s", cmd.c_str(), buf);
+		return false;
+	}
+
+	return true;
+}
+
+bool Job::job_save_json(std::string &path, char* cjson)
+{
+	FILE* pfd = fopen(path.c_str(), "wb");
+	if(pfd == NULL)
+	{
+		syslog(Logger::ERROR, "Creat json file error %s", path.c_str());
+		return false;
+	}
+
+	fwrite(cjson,1,strlen(cjson),pfd);
+	fclose(pfd);
+	
+	return true;
+}
+
+bool Job::job_read_json(std::string &path, std::string &json)
+{
+	FILE* pfd = fopen(path.c_str(), "rb");
+	if(pfd == NULL)
+	{
+		syslog(Logger::ERROR, "read json file error %s", path.c_str());
+		return false;
+	}
+
+	int len = 0;
+	char buf[1024];
+	json = "";
+
+	do
+	{
+		memset(buf, 0, 1024);
+		len = fread(buf,1,1024-1,pfd);
+		json += buf;
+	} while (len > 0);
+
+	fclose(pfd);
+	
+	return true;
 }
 
 void Job::job_install_storage(cJSON *root)
 {
 	std::string job_id;
-	std::string job_status;
+	std::string job_result;
+	std::string job_info;
 	
 	cJSON *item;
 	cJSON *item_node;
@@ -2143,14 +2194,15 @@ void Job::job_install_storage(cJSON *root)
 	}
 	job_id = item->valuestring;
 
-	job_status = "install storage start";
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::INFO, "%s", job_status.c_str());
+	job_result = "busy";
+	job_info = "install storage start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
 
 	item = cJSON_GetObjectItem(root, "install_id");
 	if(item == NULL)
 	{
-		job_status = "get install_id error";
+		job_info = "get install_id error";
 		goto end;
 	}
 	install_id = item->valueint;
@@ -2158,21 +2210,21 @@ void Job::job_install_storage(cJSON *root)
 	item_node = cJSON_GetObjectItem(root, "nodes");
 	if(item_node == NULL)
 	{
-		job_status = "get nodes error";
+		job_info = "get nodes error";
 		goto end;
 	}
 	
 	item_sub = cJSON_GetArrayItem(item_node,install_id);
 	if(item_sub == NULL)
 	{
-		job_status = "get sub node error";
+		job_info = "get sub node error";
 		goto end;
 	}
 
 	item = cJSON_GetObjectItem(item_sub, "ip");
 	if(item == NULL)
 	{
-		job_status = "get sub node ip error";
+		job_info = "get sub node ip error";
 		goto end;
 	}
 	ip = item->valuestring;
@@ -2180,14 +2232,14 @@ void Job::job_install_storage(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "port");
 	if(item == NULL)
 	{
-		job_status = "get sub node port error";
+		job_info = "get sub node port error";
 		goto end;
 	}
 	port = item->valueint;
 
 	if(!check_local_ip(ip))
 	{
-		job_status = ip + " is error";
+		job_info = ip + " is not local ip";
 		goto end;
 	}
 
@@ -2199,42 +2251,18 @@ void Job::job_install_storage(cJSON *root)
 	//////////////////////////////
 	//mkdir instance_path
 	cmd = "mkdir -p " + instance_path;
-	syslog(Logger::INFO, "job_install_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "mkdir error " + instance_path;
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "mkdir error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
 	//////////////////////////////
 	//rm file in instance_path
-	cmd = "rm " + instance_path + "/* -rf";
-	syslog(Logger::INFO, "job_install_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	cmd = "rm -rf " + instance_path + "/*";
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "rm file error " + instance_path;
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "rm file error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
@@ -2243,25 +2271,13 @@ void Job::job_install_storage(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "data_dir_path");
 	if(item == NULL)
 	{
-		job_status = "get sub node data_dir_path error";
+		job_info = "get sub node data_dir_path error";
 		goto end;
 	}
-	cmd = "rm " + std::string(item->valuestring) + " -rf";
-	syslog(Logger::INFO, "job_install_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	cmd = "rm -rf " + std::string(item->valuestring);
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "rm file error " + std::string(item->valuestring);
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "rm file error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
@@ -2270,25 +2286,13 @@ void Job::job_install_storage(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "innodb_log_dir_path");
 	if(item == NULL)
 	{
-		job_status = "get sub node innodb_log_dir_path error";
+		job_info = "get sub node innodb_log_dir_path error";
 		goto end;
 	}
-	cmd = "rm " + std::string(item->valuestring) + " -rf";
-	syslog(Logger::INFO, "job_install_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	cmd = "rm -rf " + std::string(item->valuestring);
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "rm file error " + std::string(item->valuestring);
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "rm file error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
@@ -2297,67 +2301,36 @@ void Job::job_install_storage(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "log_dir_path");
 	if(item == NULL)
 	{
-		job_status = "get sub node log_dir_path error";
+		job_info = "get sub node log_dir_path error";
 		goto end;
 	}
-	cmd = "rm " + std::string(item->valuestring) + " -rf";
-	syslog(Logger::INFO, "job_install_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	cmd = "rm -rf " + std::string(item->valuestring);
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "rm file error " + std::string(item->valuestring);
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "rm file error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
 	//////////////////////////////
 	//tar to instance_path
 	cmd = "tar zxf " + program_path + " -C " + instance_path;
-	syslog(Logger::INFO, "job_install_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "tar error " + cmd;
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "tar error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 	
 	/////////////////////////////////////////////////////////////
 	// save json file to path/dba_tools
 	jsonfile_path = instance_path + "/" + storage_prog_package_name + "/dba_tools/mysql_shard.json";
-	pfd = fopen(jsonfile_path.c_str(), "wb");
-	if(pfd == NULL)
-	{
-		job_status = "Creat json file error " + jsonfile_path;
-		goto end;
-	}
-	
+
 	cjson = cJSON_Print(root);
 	if(cjson != NULL)
 	{
-		fwrite(cjson,1,strlen(cjson),pfd);
+		job_save_json(jsonfile_path, cjson);
 		free(cjson);
 	}
-	fclose(pfd);
-
+	
 	/////////////////////////////////////////////////////////////
 	// start install storage cmd
 	cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
@@ -2367,16 +2340,19 @@ void Job::job_install_storage(cJSON *root)
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd)
 	{
-		job_status = "install error " + cmd;
+		job_info = "install error " + cmd;
 		goto end;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)
-		;//syslog(Logger::INFO, "install %s", buf);
+	{
+		if(strcasestr(buf, "error") != NULL)
+			syslog(Logger::ERROR, "install %s", buf);
+	}
 	pclose(pfd);
 
 	/////////////////////////////////////////////////////////////
 	// check instance succeed by connect to instance
-	retry = 3;
+	retry = 6;
 	user = "pgx";
 	pwd = "pgx_pwd";
 	while(retry-->0 && !Job::do_exit)
@@ -2388,24 +2364,27 @@ void Job::job_install_storage(cJSON *root)
 
 	if(retry<0)
 	{
-		job_status = "connect storage instance error";
+		job_info = "connect storage instance error";
 		goto end;
 	}
 
-	job_status = "install succeed";
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::INFO, "%s", job_status.c_str());
+	job_result = "succeed";
+	job_info = "install storage succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
 	return;
 
 end:
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::ERROR, "%s", job_status.c_str());
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
 }
 
 void Job::job_install_computer(cJSON *root)
 {
 	std::string job_id;
-	std::string job_status;
+	std::string job_result;
+	std::string job_info;
 	
 	cJSON *item;
 	cJSON *item_node;
@@ -2429,14 +2408,15 @@ void Job::job_install_computer(cJSON *root)
 	}
 	job_id = item->valuestring;
 
-	job_status = "install computer start";
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::INFO, "%s", job_status.c_str());
+	job_result = "busy";
+	job_info = "install computer start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
 
 	item = cJSON_GetObjectItem(root, "install_id");
 	if(item == NULL)
 	{
-		job_status = "get install_id error";
+		job_info = "get install_id error";
 		goto end;
 	}
 	install_id = item->valueint;
@@ -2444,21 +2424,29 @@ void Job::job_install_computer(cJSON *root)
 	item_node = cJSON_GetObjectItem(root, "nodes");
 	if(item_node == NULL)
 	{
-		job_status = "get nodes error";
+		job_info = "get nodes error";
 		goto end;
 	}
 
 	item_sub = cJSON_GetArrayItem(item_node,install_id);
 	if(item_sub == NULL)
 	{
-		job_status = "get sub node error";
+		job_info = "get sub node error";
 		goto end;
 	}
+
+	item = cJSON_GetObjectItem(item_sub, "id");
+	if(item == NULL)
+	{
+		job_info = "get sub node id error";
+		goto end;
+	}
+	install_id = item->valueint;
 
 	item = cJSON_GetObjectItem(item_sub, "ip");
 	if(item == NULL)
 	{
-		job_status = "get sub node ip error";
+		job_info = "get sub node ip error";
 		goto end;
 	}
 	ip = item->valuestring;
@@ -2466,7 +2454,7 @@ void Job::job_install_computer(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "port");
 	if(item == NULL)
 	{
-		job_status = "get sub node port error";
+		job_info = "get sub node port error";
 		goto end;
 	}
 	port = item->valueint;
@@ -2474,7 +2462,7 @@ void Job::job_install_computer(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "user");
 	if(item == NULL)
 	{
-		job_status = "get sub node user error";
+		job_info = "get sub node user error";
 		goto end;
 	}
 	user = item->valuestring;
@@ -2482,14 +2470,14 @@ void Job::job_install_computer(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "password");
 	if(item == NULL)
 	{
-		job_status = "get sub node password error";
+		job_info = "get sub node password error";
 		goto end;
 	}
 	pwd = item->valuestring;
 
 	if(!check_local_ip(ip))
 	{
-		job_status = ip + " is error";
+		job_info = ip + " is not local ip";
 		goto end;
 	}
 
@@ -2501,42 +2489,18 @@ void Job::job_install_computer(cJSON *root)
 	//////////////////////////////
 	//mkdir instance_path
 	cmd = "mkdir -p " + instance_path;
-	syslog(Logger::INFO, "job_install_computer cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "mkdir error " + instance_path;
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "mkdir error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
 	//////////////////////////////
 	//rm file in instance_path
-	cmd = "rm " + instance_path + "/* -rf";
-	syslog(Logger::INFO, "job_install_computer cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	cmd = "rm -rf " + instance_path + "/*";
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "rm file error " + instance_path;
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "rm file error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
@@ -2545,86 +2509,58 @@ void Job::job_install_computer(cJSON *root)
 	item = cJSON_GetObjectItem(item_sub, "datadir");
 	if(item == NULL)
 	{
-		job_status = "get sub node datadir error";
+		job_info = "get sub node datadir error";
 		goto end;
 	}
-	cmd = "rm " + std::string(item->valuestring) + " -rf";
-	syslog(Logger::INFO, "job_install_computer cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	cmd = "rm -rf " + std::string(item->valuestring);
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "rm file error " + std::string(item->valuestring);
-		goto end;
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "rm file error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 
 	//////////////////////////////
 	//tar to instance_path
 	cmd = "tar zxf " + program_path + " -C " + instance_path;
-	syslog(Logger::INFO, "job_install_computer cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	if(!job_system_cmd(cmd))
 	{
-		job_status = "tar error " + cmd;
-		goto end;	
-	}
-	memset(buf, 0, 256);
-	fgets(buf, 256, pfd);
-	pclose(pfd);
-
-	if(strlen(buf))
-	{
-		job_status = "tar error " + std::string(buf);
+		job_info = "job_system_cmd error";
 		goto end;
 	}
 	
 	/////////////////////////////////////////////////////////////
 	// save json file to path/scripts
 	jsonfile_path = instance_path + "/" + computer_prog_package_name + "/scripts/pgsql_comp.json";
-	pfd = fopen(jsonfile_path.c_str(), "wb");
-	if(pfd == NULL)
-	{
-		job_status = "Creat json file error " + jsonfile_path;
-		goto end;
-	}
-	
+
 	cjson = cJSON_Print(item_node);
 	if(cjson != NULL)
 	{
-		fwrite(cjson,1,strlen(cjson),pfd);
+		job_save_json(jsonfile_path, cjson);
 		free(cjson);
 	}
-	fclose(pfd);
 
 	/////////////////////////////////////////////////////////////
 	// start install computer cmd
 	cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts;";
-	cmd += "python2 install_pg.py --config=pgsql_comp.json --install_ids=" + std::to_string(install_id+1);
+	cmd += "python2 install_pg.py --config=pgsql_comp.json --install_ids=" + std::to_string(install_id);
 	syslog(Logger::INFO, "job_install_computer cmd %s", cmd.c_str());
 	
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd)
 	{
-		job_status = "install error " + cmd;
+		job_info = "install error " + cmd;
 		goto end;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)
-		;//syslog(Logger::INFO, "install %s", buf);
+	{
+		if(strcasestr(buf, "error") != NULL)
+			syslog(Logger::ERROR, "install %s", buf);
+	}
 	pclose(pfd);
 
 	/////////////////////////////////////////////////////////////
 	// check instance succeed by connect to instance
-	retry = 3;
+	retry = 6;
 	while(retry-->0 && !Job::do_exit)
 	{
 		sleep(1);
@@ -2634,39 +2570,41 @@ void Job::job_install_computer(cJSON *root)
 
 	if(retry<0)
 	{
-		job_status = "connect computer instance error";
+		job_info = "connect computer instance error";
 		goto end;
 	}
 
-	job_status = "install succeed";
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::INFO, "%s", job_status.c_str());
+	job_result = "succeed";
+	job_info = "install computer succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
 	return;
 
 end:
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::ERROR, "%s", job_status.c_str());
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
 }
 
-void Job::job_start_cluster(cJSON *root)
+void Job::job_delete_storage(cJSON *root)
 {
 	std::string job_id;
-	std::string job_status;
+	std::string job_result;
+	std::string job_info;
 	
-	cJSON *item;
-	cJSON *item_shards;
-	cJSON *item_meta;
-	cJSON *item_sub;
-	char *cjson;
-
 	FILE* pfd;
 	char buf[256];
 
-	bool ret = false;
+	cJSON *root_file = NULL;
+	cJSON *item;
+	cJSON *item_node;
+	cJSON *item_sub;
+
 	int retry;
+	int nodes;
 	int port;
-	std::string cluster_name;
-	std::string cmd, program_path, instance_path, jsonfile_path;
+	std::string ip;
+	std::string cmd, pathdir, instance_path, jsonfile_path, jsonfile_buf;
 	
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL)
@@ -2676,116 +2614,641 @@ void Job::job_start_cluster(cJSON *root)
 	}
 	job_id = item->valuestring;
 
-	job_status = "start cluster start";
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::INFO, "%s", job_status.c_str());
+	job_result = "busy";
+	job_info = "delete storage start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL)
+	{
+		job_info = "get ip error";
+		goto end;
+	}
+	ip = item->valuestring;
 	
 	item = cJSON_GetObjectItem(root, "port");
 	if(item == NULL)
 	{
-		job_status = "get port error";
+		job_info = "get port error";
 		goto end;
 	}
 	port = item->valueint;
 
-	item = cJSON_GetObjectItem(root, "cluster_name");
-	if(item == NULL)
+	if(!check_local_ip(ip))
 	{
-		job_status = "get cluster_name error";
-		goto end;
-	}
-	cluster_name = item->valuestring;
-
-	item_shards = cJSON_GetObjectItem(root, "shards");
-	if(item_shards == NULL)
-	{
-		job_status = "get shards error";
-		goto end;
-	}
-
-	item_meta = cJSON_GetObjectItem(root, "meta");
-	if(item_shards == NULL)
-	{
-		job_status = "get meta error";
+		job_info = ip + " is not local ip";
 		goto end;
 	}
 
 	/////////////////////////////////////////////////////////////
-	//upzip from program_binaries_path to instance_binaries_path
-	instance_path = instance_binaries_path + "/computer/" + std::to_string(port);
-
-	/////////////////////////////////////////////////////////////
-	// save shards json file to path/scripts
-	jsonfile_path = instance_path + "/" + computer_prog_package_name + "/scripts/pgsql_shards.json";
-	pfd = fopen(jsonfile_path.c_str(), "wb");
-	if(pfd == NULL)
-	{
-		job_status = "Creat json file error " + jsonfile_path;
-		goto end;
-	}
-	
-	cjson = cJSON_Print(item_shards);
-	if(cjson != NULL)
-	{
-		fwrite(cjson,1,strlen(cjson),pfd);
-		free(cjson);
-	}
-	fclose(pfd);
-
-	/////////////////////////////////////////////////////////////
-	// save shards json file to path/scripts
-	jsonfile_path = instance_path + "/" + computer_prog_package_name + "/scripts/pgsql_meta.json";
-	pfd = fopen(jsonfile_path.c_str(), "wb");
-	if(pfd == NULL)
-	{
-		job_status = "Creat json file error " + jsonfile_path;
-		goto end;
-	}
-	
-	cjson = cJSON_Print(item_meta);
-	if(cjson != NULL)
-	{
-		fwrite(cjson,1,strlen(cjson),pfd);
-		free(cjson);
-	}
-	fclose(pfd);
-
-	/////////////////////////////////////////////////////////////
-	// start cluster cmd
-	cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts;";
-	cmd += "python2 create_cluster.py --shards_config ./pgsql_shards.json --comps_config ./pgsql_comp.json --meta_config ./pgsql_meta.json --cluster_name ";
-	cmd += cluster_name + " --cluster_owner abc --cluster_biz kunlun";
-	syslog(Logger::INFO, "job_start_cluster cmd %s", cmd.c_str());
+	// stop storage cmd
+	instance_path = instance_binaries_path + "/storage/" + std::to_string(port);
+	cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
+	cmd += "./stopmysql.sh " + std::to_string(port);
+	syslog(Logger::INFO, "job_delete_storage cmd %s", cmd.c_str());
 	
 	pfd = popen(cmd.c_str(), "r");
 	if(!pfd)
 	{
-		job_status = "install error " + cmd;
+		job_info = "stop error " + cmd;
 		goto end;
 	}
 	while(fgets(buf, 256, pfd)!=NULL)
 	{
-		//syslog(Logger::INFO, "install %s", buf);
-		if(strstr(buf, "Installation complete for cluster") != NULL)
-			ret = true;
+		if(strcasestr(buf, "error") != NULL)
+			syslog(Logger::ERROR, "stop %s", buf);
 	}
 	pclose(pfd);
 
-	if(ret)
+	/////////////////////////////////////////////////////////////
+	// read json file from path/dba_tools
+	jsonfile_path = instance_path + "/" + storage_prog_package_name + "/dba_tools/mysql_shard.json";
+
+	if(!job_read_json(jsonfile_path, jsonfile_buf))
 	{
-		job_status = "install succeed";
-		update_jobid_status(job_id, job_status);
-		syslog(Logger::INFO, "%s", job_status.c_str());
+		job_info = "job_read_json error";
+		goto end;
+	}
+
+	root_file = cJSON_Parse(jsonfile_buf.c_str());
+	if(root_file == NULL)
+	{
+		job_info = "file cJSON_Parse error";
+		goto end;
+	}
+
+	item_node = cJSON_GetObjectItem(root_file, "nodes");
+	if(item_node == NULL)
+	{
+		job_info = "get nodes error";
+		goto end;
+	}
+
+	nodes = cJSON_GetArraySize(item_node);
+
+	/////////////////////////////////////////////////////////////
+	//find ip and port and delete pathdir
+	for(int i=0; i<nodes; i++)
+	{
+		int port_sub;
+		std::string ip_sub;
+
+		item_sub = cJSON_GetArrayItem(item_node,i);
+		if(item_sub == NULL)
+		{
+			job_info = "get sub node error";
+			goto end;
+		}
+
+		item = cJSON_GetObjectItem(item_sub, "ip");
+		if(item == NULL)
+		{
+			job_info = "get sub node ip error";
+			goto end;
+		}
+		ip_sub = item->valuestring;
+		
+		item = cJSON_GetObjectItem(item_sub, "port");
+		if(item == NULL)
+		{
+			job_info = "get sub node port error";
+			goto end;
+		}
+		port_sub = item->valueint;
+
+		if(ip_sub != ip || port_sub != port)
+			continue;
+
+		//////////////////////////////
+		//rm file in data_dir_path
+		item = cJSON_GetObjectItem(item_sub, "data_dir_path");
+		if(item == NULL)
+		{
+			job_info = "get sub node data_dir_path error";
+			goto end;
+		}
+		cmd = "rm -rf " + std::string(item->valuestring);
+		if(!job_system_cmd(cmd))
+		{
+			job_info = "job_system_cmd error";
+			goto end;
+		}
+
+		//////////////////////////////
+		//rm file in innodb_log_dir_path
+		item = cJSON_GetObjectItem(item_sub, "innodb_log_dir_path");
+		if(item == NULL)
+		{
+			job_info = "get sub node innodb_log_dir_path error";
+			goto end;
+		}
+		cmd = "rm -rf " + std::string(item->valuestring);
+		if(!job_system_cmd(cmd))
+		{
+			job_info = "job_system_cmd error";
+			goto end;
+		}
+
+		//////////////////////////////
+		//rm file in log_dir_path
+		item = cJSON_GetObjectItem(item_sub, "log_dir_path");
+		if(item == NULL)
+		{
+			job_info = "get sub node log_dir_path error";
+			goto end;
+		}
+		cmd = "rm -rf " + std::string(item->valuestring);
+		if(!job_system_cmd(cmd))
+		{
+			job_info = "job_system_cmd error";
+			goto end;
+		}
+		
+		break;
+	}
+	cJSON_Delete(root_file);
+	root_file = NULL;
+
+	//////////////////////////////
+	//rm instance_path
+	cmd = "rm -rf " + instance_path;
+	if(!job_system_cmd(cmd))
+	{
+		job_info = "job_system_cmd error";
+		goto end;
+	}
+
+	job_result = "succeed";
+	job_info = "delete storage succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	return;
+
+end:
+	if(root_file!=NULL)
+		cJSON_Delete(root_file);
+
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+}
+
+void Job::job_delete_computer(cJSON *root)
+{
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+	
+	FILE* pfd;
+	char buf[256];
+
+	cJSON *root_file = NULL;
+	cJSON *item;
+	cJSON *item_sub;
+
+	int nodes;
+	int port;
+	std::string ip;
+	std::string cmd, pathdir, instance_path, jsonfile_path, jsonfile_buf;
+	
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
 		return;
+	}
+	job_id = item->valuestring;
+
+	job_result = "busy";
+	job_info = "delete computer start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL)
+	{
+		job_info = "get ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+	
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = item->valueint;
+
+	if(!check_local_ip(ip))
+	{
+		job_info = ip + " is not local ip";
+		goto end;
+	}
+
+	/////////////////////////////////////////////////////////////
+	// read json file from path/dba_tools
+	instance_path = instance_binaries_path + "/computer/" + std::to_string(port);
+	jsonfile_path = instance_path + "/" + computer_prog_package_name + "/scripts/pgsql_comp.json";
+
+	if(!job_read_json(jsonfile_path, jsonfile_buf))
+	{
+		job_info = "job_read_json error";
+		goto end;
+	}
+
+	root_file = cJSON_Parse(jsonfile_buf.c_str());
+	if(root_file == NULL)
+	{
+		job_info = "file cJSON_Parse error";
+		goto end;
+	}
+
+	nodes = cJSON_GetArraySize(root_file);
+
+	/////////////////////////////////////////////////////////////
+	//find ip and port and delete pathdir
+	for(int i=0; i<nodes; i++)
+	{
+		int port_sub;
+		std::string ip_sub;
+
+		item_sub = cJSON_GetArrayItem(root_file,i);
+		if(item_sub == NULL)
+		{
+			job_info = "get sub node error";
+			goto end;
+		}
+
+		item = cJSON_GetObjectItem(item_sub, "ip");
+		if(item == NULL)
+		{
+			job_info = "get sub node ip error";
+			goto end;
+		}
+		ip_sub = item->valuestring;
+		
+		item = cJSON_GetObjectItem(item_sub, "port");
+		if(item == NULL)
+		{
+			job_info = "get sub node port error";
+			goto end;
+		}
+		port_sub = item->valueint;
+
+		if(ip_sub != ip || port_sub != port)
+			continue;
+
+		//////////////////////////////
+		//get datadir
+		item = cJSON_GetObjectItem(item_sub, "datadir");
+		if(item == NULL)
+		{
+			job_info = "get sub node datadir error";
+			goto end;
+		}
+		pathdir = item->valuestring;
+
+		// stop computer cmd
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/bin;";
+		cmd += "./pg_ctl -D " + pathdir + " stop";
+		syslog(Logger::INFO, "job_delete_computer cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			job_info = "stop error " + cmd;
+			goto end;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::ERROR, "stop %s", buf);
+		}
+		pclose(pfd);
+
+		//rm file in pathdir
+		cmd = "rm -rf " + pathdir;
+		if(!job_system_cmd(cmd))
+		{
+			job_info = "job_system_cmd error";
+			goto end;
+		}
+		
+		break;
+	}
+	cJSON_Delete(root_file);
+	root_file = NULL;
+
+	//////////////////////////////
+	//rm instance_path
+	cmd = "rm -rf " + instance_path;
+	if(!job_system_cmd(cmd))
+	{
+		job_info = "job_system_cmd error";
+		goto end;
+	}
+
+	job_result = "succeed";
+	job_info = "delete computer succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	return;
+
+end:
+	if(root_file!=NULL)
+		cJSON_Delete(root_file);
+
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+}
+
+void Job::job_backup_shard(cJSON *root)
+{
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+	cJSON *item;
+	
+	FILE* pfd;
+	char buf[512];
+
+	std::string cmd, cluster_name,shard_name;
+	int port,hdfs_port;
+	std::string ip,hdfs_ip;
+	
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	job_result = "busy";
+	job_info = "backup shard start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL)
+	{
+		job_info = "get ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+	
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = item->valueint;
+
+	if(!check_local_ip(ip))
+	{
+		job_info = ip + " is not local ip";
+		goto end;
+	}
+
+	item = cJSON_GetObjectItem(root, "cluster_name");
+	if(item == NULL)
+	{
+		job_info = "get cluster_name error";
+		goto end;
+	}
+	cluster_name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "shard_name");
+	if(item == NULL)
+	{
+		job_info = "get shard_name error";
+		goto end;
+	}
+	shard_name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "hdfs_ip");
+	if(item == NULL)
+	{
+		job_info = "get hdfs_ip error";
+		goto end;
+	}
+	hdfs_ip = item->valuestring;
+	
+	item = cJSON_GetObjectItem(root, "hdfs_port");
+	if(item == NULL)
+	{
+		job_info = "get hdfs_port error";
+		goto end;
+	}
+	hdfs_port = item->valueint;
+
+	job_info = "backup shard wroking";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	////////////////////////////////////////////////////////
+	//start backup path
+	cmd = "backup -backuptype=storage -port=" + std::to_string(port) + " -clustername=" + cluster_name + " -shardname=" + shard_name;
+	cmd += " -HdfsNameNodeService=hdfs://" + hdfs_ip + ":" + std::to_string(hdfs_port);
+	syslog(Logger::INFO, "job_backup_shard cmd %s", cmd.c_str());
+	
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		job_info = "backup error " + cmd;
+		goto end;
+	}
+	while(fgets(buf, 512, pfd)!=NULL)
+	{
+		//if(strcasestr(buf, "error") != NULL)
+			syslog(Logger::ERROR, "backup %s", buf);
+	}
+	pclose(pfd);
+
+	////////////////////////////////////////////////////////
+	//check error, must be contain cluster_name & shard_name, and the tail like ".tgz\n\0"
+	if(strstr(buf, cluster_name.c_str()) == NULL || strstr(buf, shard_name.c_str()) == NULL)
+	{
+		syslog(Logger::ERROR, "backup error: %s", buf);
+		job_info = "backup cmd return error";
+		goto end;
 	}
 	else
 	{
-		job_status = "install error";
+		char *p = strstr(buf, ".tgz");
+		if(p == NULL || *(p+4) != '\n' || *(p+5) != '\0')
+		{
+			syslog(Logger::ERROR, "backup error: %s", buf);
+			job_info = "backup cmd return error";
+			goto end;
+		}
 	}
 
+	////////////////////////////////////////////////////////
+	//rm backup path
+	cmd = "rm -rf ./data";
+	if(!job_system_cmd(cmd))
+	{
+		job_info = "job_system_cmd error";
+		goto end;
+	}
+
+	job_result = "succeed";
+	job_info = "backup succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	return;
+
 end:
-	update_jobid_status(job_id, job_status);
-	syslog(Logger::ERROR, "%s", job_status.c_str());
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+}
+
+void Job::job_restore_shard(cJSON *root)
+{
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+	cJSON *item;
+	
+	FILE* pfd;
+	char buf[512];
+
+	std::string cmd, cluster_name,shard_name,timestamp;
+	int port,hdfs_port;
+	std::string ip,hdfs_ip;
+	
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
+		return;
+	}
+	job_id = item->valuestring;
+
+	job_result = "busy";
+	job_info = "restore shard start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL)
+	{
+		job_info = "get ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+	
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = item->valueint;
+
+	if(!check_local_ip(ip))
+	{
+		job_info = ip + " is not local ip";
+		goto end;
+	}
+
+	item = cJSON_GetObjectItem(root, "cluster_name");
+	if(item == NULL)
+	{
+		job_info = "get cluster_name error";
+		goto end;
+	}
+	cluster_name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "shard_name");
+	if(item == NULL)
+	{
+		job_info = "get shard_name error";
+		goto end;
+	}
+	shard_name = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "timestamp");
+	if(item == NULL)
+	{
+		job_info = "get timestamp error";
+		goto end;
+	}
+	timestamp = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "hdfs_ip");
+	if(item == NULL)
+	{
+		job_info = "get hdfs_ip error";
+		goto end;
+	}
+	hdfs_ip = item->valuestring;
+	
+	item = cJSON_GetObjectItem(root, "hdfs_port");
+	if(item == NULL)
+	{
+		job_info = "get hdfs_port error";
+		goto end;
+	}
+	hdfs_port = item->valueint;
+
+	job_info = "restore shard wroking";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	////////////////////////////////////////////////////////
+	//start backup path
+	cmd = "restore -port=" + std::to_string(port) + " -origclustername=" + cluster_name + " -origshardname=" + shard_name;
+	cmd += " -restoretime='" + timestamp + "' -HdfsNameNodeService=hdfs://" + hdfs_ip + ":" + std::to_string(hdfs_port);
+	syslog(Logger::INFO, "job_restore_shard cmd %s", cmd.c_str());
+	
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		job_info = "restore error " + cmd;
+		goto end;
+	}
+	while(fgets(buf, 512, pfd)!=NULL)
+	{
+		//if(strcasestr(buf, "error") != NULL)
+			syslog(Logger::ERROR, "restore %s", buf);
+	}
+	pclose(pfd);
+
+	////////////////////////////////////////////////////////
+	//check error
+	if(strstr(buf, "restore MySQL instance successfully") == NULL)
+	{
+		syslog(Logger::ERROR, "restore error: %s", buf);
+		job_info = "restore cmd return error";
+		goto end;
+	}
+
+	////////////////////////////////////////////////////////
+	//rm restore path
+	cmd = "rm -rf ./data";
+	if(!job_system_cmd(cmd))
+	{
+		job_info = "job_system_cmd error";
+		goto end;
+	}
+
+	job_result = "succeed";
+	job_info = "restore succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	return;
+
+end:
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
 }
 
 void Job::job_handle(std::string &job)
@@ -2843,9 +3306,21 @@ void Job::job_handle(std::string &job)
 	{
 		job_install_computer(root);
 	}
-	else if(job_type == JOB_START_CLUSTER)
+	else if(job_type == JOB_DELETE_STORAGE)
 	{
-		job_start_cluster(root);
+		job_delete_storage(root);
+	}
+	else if(job_type == JOB_DELETE_COMPUTER)
+	{
+		job_delete_computer(root);
+	}
+	else if(job_type == JOB_BACKUP_SHARD)
+	{
+		job_backup_shard(root);
+	}
+	else if(job_type == JOB_RESTORE_SHARD)
+	{
+		job_restore_shard(root);
 	}
 
 	cJSON_Delete(root);

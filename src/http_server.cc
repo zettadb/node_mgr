@@ -45,6 +45,8 @@ Http_server* Http_server::m_inst = NULL;
 int Http_server::do_exit = 0;
 
 int64_t num_http_threads = 3;
+std::string cluster_mgr_http_ip;
+int64_t cluster_mgr_http_port = 5000;
 int64_t node_mgr_http_port = 5001;
 std::string http_web_path;
 std::string http_upload_path;
@@ -102,7 +104,7 @@ void Http_server::join_all()
 	if(wakeupfd>0)
 	{
 		uint64_t one = 1;
-		write(wakeupfd, &one, sizeof one);	
+		size_t n = write(wakeupfd, &one, sizeof(one));	
 		close(wakeupfd);
 	}
 	

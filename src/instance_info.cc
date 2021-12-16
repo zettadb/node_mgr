@@ -39,8 +39,8 @@ int64_t pullup_wait_const = 9;
 int64_t stmt_retries = 3;
 int64_t stmt_retry_interval_ms = 500;
 
-std::string cluster_mgr_http_ip;
-int64_t cluster_mgr_http_port = 0;
+extern std::string cluster_mgr_http_ip;
+extern int64_t cluster_mgr_http_port;
 
 extern int64_t thread_work_interval;
 

@@ -33,13 +33,17 @@ JOB_GET_NODE,
 JOB_GET_INFO,
 JOB_GET_STATUS,
 JOB_GET_DISK_SIZE,
-JOB_GET_SPACE_PORT,
+JOB_GET_PATH_SPACE,
 JOB_AUTO_PULLUP,
 JOB_COLD_BACKUP,
 JOB_COLD_RESTORE,
+JOB_MACHINE_PATH, 
 JOB_INSTALL_STORAGE, 
-JOB_INSTALL_COMPUTER, 
-JOB_START_CLUSTER, 
+JOB_INSTALL_COMPUTER,
+JOB_DELETE_STORAGE, 
+JOB_DELETE_COMPUTER,
+JOB_BACKUP_SHARD, 
+JOB_RESTORE_SHARD, 
 };
 enum File_type {
 FILE_NONE, 
@@ -67,7 +71,7 @@ private:
 	std::list<std::pair<std::string, std::string>> list_jobid_path;
 	static const int kMaxStatus = 30;
 	std::mutex mutex_stauts_;
-	std::list<std::pair<std::string, std::string>> list_jobid_status;
+	std::list<std::tuple<std::string, std::string, std::string>> list_jobid_result_info;
 	
 public:
 	Job();
@@ -89,8 +93,7 @@ public:
 	bool set_auto_pullup(cJSON *root, std::string &str_ret);
 	bool get_job_status(cJSON *root, std::string &str_ret);
 	bool get_disk_size(cJSON *root, std::string &str_ret);
-	bool get_space_port(cJSON *root, std::string &str_ret);
-	bool get_max_port_instance(std::string &path, int &port, int &instance);
+	bool get_path_space(cJSON *root, std::string &str_ret);
 	bool get_path_size(std::string &path, std::string &used, std::string &free);
 	bool get_path_size(std::string &path, uint64_t &used, uint64_t &free);
 	bool get_cpu_used(std::string &cpu_used);
@@ -99,8 +102,13 @@ public:
 	bool get_date_time(std::string &date_time);
 
 	bool get_uuid(std::string &uuid);
-	bool get_job_type(char     *str, Job_type &job_type);
-	bool get_file_type(char     *str, File_type &file_type);
+	bool get_timestamp(std::string &timestamp);
+	bool get_job_type(char *str, Job_type &job_type);
+	bool get_file_type(char *str, File_type &file_type);
+	
+	bool update_jobid_status(std::string &jobid, std::string &result, std::string &info);
+	bool get_jobid_status(std::string &jobid, std::string &result, std::string &info);
+
 	bool get_table_path(std::string &ip, int port, std::string &user, std::string &psw, 
 								std::string &db, std::string &tb, std::string &tb_path);
 	bool get_binlog_path(std::string &ip, int port, std::string &user, std::string &psw, 
@@ -114,9 +122,6 @@ public:
 
 	bool add_file_path(std::string &jobid, std::string &path);
 	bool get_file_path(std::string &jobid, std::string &path);
-	
-	bool update_jobid_status(std::string &jobid, std::string &status);
-	bool get_jobid_status(std::string &jobid, std::string &status);
 
 	void job_delete(cJSON *root);
 	void job_send(cJSON *root);
@@ -125,9 +130,16 @@ public:
 	void job_cold_backup(cJSON *root);
 	void job_cold_restore(cJSON *root);
 
+	bool job_system_cmd(std::string &cmd);
+	bool job_save_json(std::string &path, char* cjson);
+	bool job_read_json(std::string &path, std::string &json);
 	void job_install_storage(cJSON *root);
 	void job_install_computer(cJSON *root);
-	void job_start_cluster(cJSON *root);
+	void job_delete_storage(cJSON *root);
+	void job_delete_computer(cJSON *root);
+
+	void job_backup_shard(cJSON *root);
+	void job_restore_shard(cJSON *root);
 
 	void job_handle(std::string &job);
 	void add_job(std::string &str);
