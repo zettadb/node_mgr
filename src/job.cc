@@ -1682,8 +1682,7 @@ void Job::job_stop_storage(int port)
 
 					cmd = "kill -9 " + process_id;
 					syslog(Logger::INFO, "job_stop_storage cmd %s", cmd.c_str());
-					system(cmd.c_str());
-				/*
+
 					pfd = popen(cmd.c_str(), "r");
 					if(!pfd)
 					{
@@ -1696,7 +1695,6 @@ void Job::job_stop_storage(int port)
 							syslog(Logger::INFO, "%s", buf);
 					}
 					pclose(pfd);
-					*/
 				}
 			}
 		}
@@ -1746,8 +1744,7 @@ void Job::job_stop_computer(int port)
 
 				cmd = "kill -9 " + process_id;
 				syslog(Logger::INFO, "job_stop_computer cmd %s", cmd.c_str());
-				system(cmd.c_str());
-			/*
+
 				pfd = popen(cmd.c_str(), "r");
 				if(!pfd)
 				{
@@ -1760,7 +1757,6 @@ void Job::job_stop_computer(int port)
 						syslog(Logger::INFO, "%s", buf);
 				}
 				pclose(pfd);
-				*/
 			}
 		}
 	}
@@ -1880,7 +1876,20 @@ void Job::job_install_storage(cJSON *root)
 		cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
 		cmd += "./stopmysql.sh " + std::to_string(port);
 		syslog(Logger::INFO, "system stop_storage cmd %s", cmd.c_str());
-		system(cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "job_stop_storage error %s", cmd.c_str());
+			return;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+
 		//job_stop_storage(port);
 	}
 
