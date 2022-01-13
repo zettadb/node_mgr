@@ -11,7 +11,6 @@
 #include "os.h"
 #include "log.h"
 #include "config.h"
-#include "instance_info.h"
 #include "thread_manager.h"
 #include <unistd.h>
 #include <signal.h>
@@ -46,12 +45,13 @@ int main(int argc, char **argv)
 	if (System::create_instance(argv[1]))
 		return 1;
 
-	int ret;
 	Thread main_thd;
 
 	while (!Thread_manager::do_exit)
 	{
-		Instance_info::get_instance()->keepalive_instance();
+		if (System::get_instance()->get_auto_pullup_working())
+			System::get_instance()->keepalive_instance();
+		
 		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 1000);
 	}
 

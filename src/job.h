@@ -28,22 +28,22 @@ JOB_SEND,
 JOB_RECV, 
 JOB_DELETE, 
 JOB_PEEK,
-JOB_UPDATE_NODE,
-JOB_GET_NODE,
-JOB_GET_INFO,
 JOB_GET_STATUS,
+JOB_GET_INSTANCES,
+JOB_GET_INFO,
 JOB_GET_DISK_SIZE,
 JOB_GET_PATH_SPACE,
+JOB_UPDATE_INSTANCES,
 JOB_AUTO_PULLUP,
-JOB_COLD_BACKUP,
-JOB_COLD_RESTORE,
 JOB_MACHINE_PATH, 
 JOB_INSTALL_STORAGE, 
 JOB_INSTALL_COMPUTER,
 JOB_DELETE_STORAGE, 
 JOB_DELETE_COMPUTER,
+JOB_GROUP_SEEDS,
 JOB_BACKUP_SHARD, 
-JOB_RESTORE_SHARD, 
+JOB_RESTORE_STORAGE, 
+JOB_RESTORE_COMPUTER, 
 };
 enum File_type {
 FILE_NONE, 
@@ -58,6 +58,7 @@ public:
 	std::queue<std::string> que_job;
 	static int do_exit;
 	std::vector<std::string> vec_local_ip;
+	std::string user_name;
 
 private:
 	static Job *m_inst;
@@ -84,14 +85,9 @@ public:
 	int start_job_thread();
 	void join_all();
 
-	void get_local_ip();
-	bool check_local_ip(std::string &ip);
-
-	bool http_para_cmd(const std::string &para, std::string &str_ret);
 	bool get_node_instance(cJSON *root, std::string &str_ret);
 	bool get_node_info(cJSON *root, std::string &str_ret);
 	bool set_auto_pullup(cJSON *root, std::string &str_ret);
-	bool get_job_status(cJSON *root, std::string &str_ret);
 	bool get_disk_size(cJSON *root, std::string &str_ret);
 	bool get_path_space(cJSON *root, std::string &str_ret);
 	bool get_path_size(std::string &path, std::string &used, std::string &free);
@@ -99,15 +95,13 @@ public:
 	bool get_cpu_used(std::string &cpu_used);
 	bool get_mem_used(std::string &used, std::string &free);
 	bool get_user_path(std::string &path);
-	bool get_date_time(std::string &date_time);
 
+	bool check_local_ip(std::string &ip);
+	void get_local_ip();
+	void get_user_name();
 	bool get_uuid(std::string &uuid);
 	bool get_timestamp(std::string &timestamp);
-	bool get_job_type(char *str, Job_type &job_type);
-	bool get_file_type(char *str, File_type &file_type);
-	
-	bool update_jobid_status(std::string &jobid, std::string &result, std::string &info);
-	bool get_jobid_status(std::string &jobid, std::string &result, std::string &info);
+	bool get_datatime(std::string &datatime);
 
 	bool get_table_path(std::string &ip, int port, std::string &user, std::string &psw, 
 								std::string &db, std::string &tb, std::string &tb_path);
@@ -117,8 +111,8 @@ public:
 								std::string &db, std::string &tb);
 	bool get_cnf_path(std::string &ip, int port, std::string &user, std::string &psw, 
 									std::string &cnf_path);
-	bool get_mysql_alive(std::string &ip, int port, std::string &user, std::string &psw);
-	bool get_pgsql_alive(std::string &ip, int port, std::string &user, std::string &psw);
+	bool update_variables(std::string &ip, int port, std::string &user, std::string &psw, 
+									std::string &name, std::string &value);
 
 	bool add_file_path(std::string &jobid, std::string &path);
 	bool get_file_path(std::string &jobid, std::string &path);
@@ -127,20 +121,28 @@ public:
 	void job_send(cJSON *root);
 	void job_recv(cJSON *root);
 
-	void job_cold_backup(cJSON *root);
-	void job_cold_restore(cJSON *root);
-
 	bool job_system_cmd(std::string &cmd);
-	bool job_save_json(std::string &path, char* cjson);
-	bool job_read_json(std::string &path, std::string &json);
+	bool job_save_file(std::string &path, char* buf);
+	bool job_read_file(std::string &path, std::string &str);
+	void job_stop_storage(int port);
+	void job_stop_computer(int port);
+
 	void job_install_storage(cJSON *root);
 	void job_install_computer(cJSON *root);
 	void job_delete_storage(cJSON *root);
 	void job_delete_computer(cJSON *root);
+	void job_group_seeds(cJSON *root);
 
 	void job_backup_shard(cJSON *root);
-	void job_restore_shard(cJSON *root);
+	void job_restore_storage(cJSON *root);
+	void job_restore_computer(cJSON *root);
 
+	bool update_jobid_status(std::string &jobid, std::string &result, std::string &info);
+	bool get_jobid_status(std::string &jobid, std::string &result, std::string &info);
+	bool job_get_status(cJSON *root, std::string &str_ret);
+	bool get_job_type(char *str, Job_type &job_type);
+	bool get_file_type(char *str, File_type &file_type);
+	bool job_handle_ahead(const std::string &para, std::string &str_ret);
 	void job_handle(std::string &job);
 	void add_job(std::string &str);
 	void job_work();

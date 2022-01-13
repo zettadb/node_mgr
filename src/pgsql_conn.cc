@@ -10,7 +10,9 @@
 
 int PGSQL_CONN::connect(const char *database, const char *ip, int port, const char *user, const char *pwd)
 {
-	if(connected)
+	if(connected && db == database)
+		return 0;
+	else
 		close_conn();
 
 	char conninfo[256];
@@ -21,10 +23,11 @@ int PGSQL_CONN::connect(const char *database, const char *ip, int port, const ch
 
 	if (PQstatus(conn) != CONNECTION_OK)
 	{
-		syslog(Logger::ERROR, "Connected to pgsql %s fail...",conninfo);
+		syslog(Logger::ERROR, "Connected to pgsql fail: %s", PQerrorMessage(conn));
 		return 1;
 	}
 
+	db = database;
 	connected = true;
 		
 	return 0;
@@ -63,12 +66,20 @@ int PGSQL_CONN::send_stmt(int pgres, const char *stmt)
 	if(pgres == PG_COPYRES_TUPLES)
 	{
 		if (PQresultStatus(result) != PGRES_TUPLES_OK)
+		{
+			syslog(Logger::ERROR, "PQresultStatus error: %s", PQerrorMessage(conn));
+			close_conn();
 			ret = 1;
+		}
 	}
 	else
 	{
 		if (PQresultStatus(result) != PGRES_COMMAND_OK)
+		{
+			syslog(Logger::ERROR, "PQresultStatus error: %s", PQerrorMessage(conn));
+			close_conn();
 			ret = 1;
+		}
 	}
 
 	return ret;

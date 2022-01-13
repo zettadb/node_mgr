@@ -21,7 +21,7 @@ bool mysql_transmit_compress = false;
 int MYSQL_CONN::connect(const char *database, const char *ip, int port, const char *user, const char *pwd)
 {
 	if (connected) 
-		close_conn();
+		return 0;
 
     mysql_init(&conn);
     //mysql_options(mysql, MYSQL_OPT_NONBLOCK, 0); always do sync send
@@ -153,10 +153,15 @@ bool MYSQL_CONN::send_stmt(enum_sql_command sqlcom_, const char *stmt)
     if (ret != 0)
     {
         handle_mysql_error(stmt, strlen(stmt));
+        close_conn();
         return true;
     }
     if (handle_mysql_result())
+    {
+        close_conn();
         return true;
+    }
+    
     return false;
 }
 

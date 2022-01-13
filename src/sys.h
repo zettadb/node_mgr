@@ -9,6 +9,7 @@
 #define SYS_H
 #include "sys_config.h"
 #include "global.h"
+#include "instance_info.h"
 #include <vector>
 #include <map>
 
@@ -20,12 +21,16 @@ class Thread;
 class System
 {
 private:
+	//stop working for backup/restore cluster
+	bool auto_pullup_working;
+
 	std::string config_path;
 
 	mutable pthread_mutex_t mtx;
 	mutable pthread_mutexattr_t mtx_attr;
 
 	System(const std::string&cfg_path) :
+		auto_pullup_working(true),
 		config_path(cfg_path)
 	{
 		pthread_mutexattr_init(&mtx_attr);
@@ -37,6 +42,22 @@ private:
 	System(const System&);
 	System&operator=(const System&);
 public:
+	void set_auto_pullup_working(bool stop)
+	{
+		Scopped_mutex sm(mtx);
+		auto_pullup_working = stop;
+	}
+	bool get_auto_pullup_working()
+	{
+		Scopped_mutex sm(mtx);
+		return auto_pullup_working;
+	}
+	void keepalive_instance()
+	{
+		Scopped_mutex sm(mtx);
+		Instance_info::get_instance()->keepalive_instance();
+	}
+
 	~System();
 	static int create_instance(const std::string&cfg_path);
 	static System* get_instance()

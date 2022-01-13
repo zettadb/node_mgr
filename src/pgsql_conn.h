@@ -20,6 +20,7 @@ public:
 	void free_pgsql_result();
 private:
 	bool connected;
+	std::string db;
 	PGconn	   *conn;
 public:
 	PGSQL_CONN()

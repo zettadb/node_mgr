@@ -41,8 +41,12 @@ int64_t stmt_retry_interval_ms = 500;
 
 extern std::string cluster_mgr_http_ip;
 extern int64_t cluster_mgr_http_port;
-
 extern int64_t thread_work_interval;
+
+extern std::string program_binaries_path;
+extern std::string instance_binaries_path;
+extern std::string storage_prog_package_name;
+extern std::string computer_prog_package_name;
 
 Instance::Instance(Instance_type type_, std::string &ip_, int port_, std::string &user_, std::string &pwd_):
 	type(type_),ip(ip_),port(port_),user(user_),pwd(pwd_),
@@ -92,7 +96,7 @@ void Instance_info::get_local_instance(cJSON *root)
 {
 	cJSON *item;
 	
-	item = cJSON_GetObjectItem(root, "node_type");
+	item = cJSON_GetObjectItem(root, "instance_type");
 	if(item == NULL)
 	{
 		get_meta_instance();
@@ -101,17 +105,19 @@ void Instance_info::get_local_instance(cJSON *root)
 		return;
 	}
 
-	if(strcmp(item->valuestring, "meta_instance"))
+	if(strcmp(item->valuestring, "meta_instance") == 0)
 		get_meta_instance();
-	else if(strcmp(item->valuestring, "storage_instance"))
+	else if(strcmp(item->valuestring, "storage_instance") == 0)
 		get_storage_instance();
-	else if(strcmp(item->valuestring, "computer_instance"))
+	else if(strcmp(item->valuestring, "computer_instance") == 0)
 		get_computer_instance();
+	else
+		syslog(Logger::ERROR, "instance_type error %s", item->valuestring);
 }
 
 int Instance_info::get_meta_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_instance_);
+	std::lock_guard<std::mutex> lock(mutex_instance_);
 
 	cJSON *root;
 	cJSON *item;
@@ -120,7 +126,7 @@ int Instance_info::get_meta_instance()
 	
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "job_type", "get_instance");
-	cJSON_AddStringToObject(root, "node_type", "meta_instance");
+	cJSON_AddStringToObject(root, "instance_type", "meta_instance");
 	int ip_count = 0;
 	for(auto &local_ip: Job::get_instance()->vec_local_ip)
 	{
@@ -139,13 +145,13 @@ int Instance_info::get_meta_instance()
 	
 	if(ret == 0)
 	{
-		//syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		//syslog(Logger::INFO, "result_str meta=%s", result_str.c_str());
 		cJSON *ret_root;
 		cJSON *ret_item;
 
 		ret_root = cJSON_Parse(result_str.c_str());
 		if(ret_root == NULL)
-			return -5;
+			return 1;
 
 		for (auto &instance:vec_meta_instance)
 			delete instance;
@@ -185,54 +191,21 @@ int Instance_info::get_meta_instance()
 			pwd = sub_item->valuestring;
 
 			Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
-			vec_meta_instance.push_back(instance);
+			vec_meta_instance.emplace_back(instance);
 
 			MYSQL_CONN *conn = new MYSQL_CONN();
 			instance->mysql_conn = conn;
 		}
-
 	}
 
-	//get the path of meta instance
-	for (auto &instance:vec_meta_instance)
-	{
-		int retry = stmt_retries;
-		auto conn = instance->mysql_conn;
-		
-		while(retry--)
-		{
-			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
-			{
-				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
-				continue;
-			}
-			
-			if(conn->send_stmt(SQLCOM_SELECT, "select @@datadir"))
-				continue;
-		
-			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(conn->result)))
-			{
-				//syslog(Logger::INFO, "row[]=%s",row[0]);
-				instance->path = row[0];
-			}
-			else
-			{
-				continue;
-			}
-		
-			break;
-		}
-		conn->free_mysql_result();
-	}
+	syslog(Logger::INFO, "meta instance %d update", vec_meta_instance.size());
 
 	return ret;
 }
 
 int Instance_info::get_storage_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_instance_);
+	std::lock_guard<std::mutex> lock(mutex_instance_);
 
 	cJSON *root;
 	cJSON *item;
@@ -241,7 +214,7 @@ int Instance_info::get_storage_instance()
 	
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "job_type", "get_instance");
-	cJSON_AddStringToObject(root, "node_type", "storage_instance");
+	cJSON_AddStringToObject(root, "instance_type", "storage_instance");
 	int ip_count = 0;
 	for(auto &local_ip: Job::get_instance()->vec_local_ip)
 	{
@@ -260,13 +233,13 @@ int Instance_info::get_storage_instance()
 	
 	if(ret == 0)
 	{
-		//syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		//syslog(Logger::INFO, "result_str storage=%s", result_str.c_str());
 		cJSON *ret_root;
 		cJSON *ret_item;
 
 		ret_root = cJSON_Parse(result_str.c_str());
 		if(ret_root == NULL)
-			return -5;
+			return 1;
 
 		for (auto &instance:vec_storage_instance)
 			delete instance;
@@ -306,7 +279,7 @@ int Instance_info::get_storage_instance()
 			pwd = sub_item->valuestring;
 
 			Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
-			vec_storage_instance.push_back(instance);
+			vec_storage_instance.emplace_back(instance);
 
 			sub_item = cJSON_GetObjectItem(item, "cluster");
 			if(sub_item == NULL)
@@ -323,46 +296,14 @@ int Instance_info::get_storage_instance()
 		}
 	}
 
-	//get the path of storage instance
-	for (auto &instance:vec_storage_instance)
-	{
-		int retry = stmt_retries;
-		auto conn = instance->mysql_conn;
-		
-		while(retry--)
-		{
-			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
-			{
-				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
-				continue;
-			}
-			
-			if(conn->send_stmt(SQLCOM_SELECT, "select @@datadir"))
-				continue;
-		
-			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(conn->result)))
-			{
-				//syslog(Logger::INFO, "row[]=%s",row[0]);
-				instance->path = row[0];
-			}
-			else
-			{
-				continue;
-			}
-		
-			break;
-		}
-		conn->free_mysql_result();
-	}
+	syslog(Logger::INFO, "storage instance %d update", vec_storage_instance.size());
 
 	return ret;
 }
 
 int Instance_info::get_computer_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_instance_);
+	std::lock_guard<std::mutex> lock(mutex_instance_);
 
 	cJSON *root;
 	cJSON *item;
@@ -371,7 +312,7 @@ int Instance_info::get_computer_instance()
 	
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "job_type", "get_instance");
-	cJSON_AddStringToObject(root, "node_type", "computer_instance");
+	cJSON_AddStringToObject(root, "instance_type", "computer_instance");
 	int ip_count = 0;
 	for(auto &local_ip: Job::get_instance()->vec_local_ip)
 	{
@@ -390,13 +331,13 @@ int Instance_info::get_computer_instance()
 	
 	if(ret == 0)
 	{
-		//syslog(Logger::INFO, "result_str=%s", result_str.c_str());
+		//syslog(Logger::INFO, "result_str computer=%s", result_str.c_str());
 		cJSON *ret_root;
 		cJSON *ret_item;
 
 		ret_root = cJSON_Parse(result_str.c_str());
 		if(ret_root == NULL)
-			return -5;
+			return 1;
 
 		for (auto &instance:vec_computer_instance)
 			delete instance;
@@ -436,53 +377,59 @@ int Instance_info::get_computer_instance()
 			pwd = sub_item->valuestring;
 
 			Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
-			vec_computer_instance.push_back(instance);
+			vec_computer_instance.emplace_back(instance);
 
 			sub_item = cJSON_GetObjectItem(item, "cluster");
 			if(sub_item == NULL)
 				break;
 			instance->cluster = sub_item->valuestring;
 
+			sub_item = cJSON_GetObjectItem(item, "comp");
+			if(sub_item == NULL)
+				break;
+			instance->comp = sub_item->valuestring;
+
 			PGSQL_CONN *conn = new PGSQL_CONN();
 			instance->pgsql_conn = conn;
 		}
 	}
 
-	//get the path of computer instance
-	for (auto &instance:vec_computer_instance)
-	{
-		int retry = stmt_retries;
-		auto conn = instance->pgsql_conn;
-		
-		while(retry--)
-		{
-			if(conn->connect("postgres", instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
-			{
-				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
-								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
-				continue;
-			}
-		
-			if(conn->send_stmt(PG_COPYRES_TUPLES, "SELECT setting FROM pg_settings WHERE name='data_directory'"))
-				continue;
-
-			if(PQntuples(conn->result) == 1)
-			{
-				//syslog(Logger::INFO, "presult = %s", PQgetvalue(conn->result,0,0));
-				instance->path = PQgetvalue(conn->result,0,0);
-			}
-			
-			break;
-		}
-		conn->free_pgsql_result();
-	}
+	syslog(Logger::INFO, "computer instance %d update", vec_computer_instance.size());
 
 	return ret;
 }
 
+void Instance_info::remove_storage_instance(std::string &ip, int port)
+{
+	std::lock_guard<std::mutex> lock(mutex_instance_);
+
+	for(auto it = vec_storage_instance.begin(); it != vec_storage_instance.end(); it++)
+	{
+		if((*it)->ip == ip && (*it)->port == port)
+		{
+			vec_storage_instance.erase(it);
+			break;
+		}
+	}
+}
+
+void Instance_info::remove_computer_instance(std::string &ip, int port)
+{
+	std::lock_guard<std::mutex> lock(mutex_instance_);
+
+	for(auto it = vec_computer_instance.begin(); it != vec_computer_instance.end(); it++)
+	{
+		if((*it)->ip == ip && (*it)->port == port)
+		{
+			vec_computer_instance.erase(it);
+			break;
+		}
+	}
+}
+
 void Instance_info::set_auto_pullup(int seconds, int port)
 {
-	std::unique_lock<std::mutex> lock(mutex_instance_);
+	std::lock_guard<std::mutex> lock(mutex_instance_);
 
 	if(port<=0)		//done on all of the port
 	{
@@ -527,17 +474,129 @@ void Instance_info::set_auto_pullup(int seconds, int port)
 	
 }
 
+bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip, int port, std::string &user, std::string &psw)
+{
+	//syslog(Logger::INFO, "get_mysql_alive ip=%s,port=%d,user=%s,psw=%s", ip.c_str(), port, user.c_str(), psw.c_str());
+
+	int retry = stmt_retries;
+
+	while(retry--)
+	{
+		if(mysql_conn->connect(NULL, ip.c_str(), port, user.c_str(), psw.c_str()))
+		{
+			syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
+							ip.c_str(), port, user.c_str(), psw.c_str());
+			continue;
+		}
+
+		if(mysql_conn->send_stmt(SQLCOM_SELECT, "select version()"))
+			continue;
+
+		MYSQL_ROW row;
+		if ((row = mysql_fetch_row(mysql_conn->result)))
+		{
+			//syslog(Logger::INFO, "row[]=%s",row[0]);
+			if (strcasestr(row[0], "kunlun-storage"))
+				break;
+		}
+		else
+		{
+			continue;
+		}
+
+		break;
+	}
+	mysql_conn->free_mysql_result();
+
+	if(retry<0)
+		return false;
+
+	return true;
+}
+
+bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip, int port, std::string &user, std::string &psw)
+{
+	//syslog(Logger::INFO, "get_pgsql_alive ip=%s,port=%d,user=%s,psw=%s", ip.c_str(), port, user.c_str(), psw.c_str());
+
+	int retry = stmt_retries;
+
+	while(retry--)
+	{
+		if(pgsql_conn->connect("postgres", ip.c_str(), port, user.c_str(), psw.c_str()))
+		{
+			syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
+							ip.c_str(), port, user.c_str(), psw.c_str());
+			continue;
+		}
+	
+		if(pgsql_conn->send_stmt(PG_COPYRES_TUPLES, "select version()"))
+			continue;
+
+		if(PQntuples(pgsql_conn->result) == 1)
+		{
+			//syslog(Logger::INFO, "presult = %s", PQgetvalue(pgsql_conn.result,0,0));
+			if (strcasestr(PQgetvalue(pgsql_conn->result,0,0), "PostgreSQL"))
+				break;
+		}
+		
+		break;
+	}
+	pgsql_conn->free_pgsql_result();
+
+	if(retry<0)
+		return false;
+
+	return true;
+}
+
+bool Instance_info::pullup_mysql(int port)
+{
+	std::string install_path = instance_binaries_path + "/storage/" + std::to_string(port) + "/" + 
+					storage_prog_package_name + "/dba_tools";
+	std::string cmd = "cd " + install_path + ";./startmysql.sh " + std::to_string(port);
+	syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
+	//system(cmd.c_str());
+	
+	FILE* pfd;
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "pullup_mysql error %s" ,cmd.c_str());
+		return false;
+	}
+	pclose(pfd);
+	return true;
+}
+
+bool Instance_info::pullup_pgsql(int port)
+{
+	std::string install_path = instance_binaries_path + "/computer/" + std::to_string(port) + "/" + 
+					computer_prog_package_name + "/scripts";
+	std::string cmd = "cd " + install_path + ";python2 start_pg.py port=" + std::to_string(port);
+	syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
+	//system(cmd.c_str());
+	
+	FILE* pfd;
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "pullup_pgsql error %s" ,cmd.c_str());
+		return false;
+	}
+	pclose(pfd);
+	return true;
+}
+
 void Instance_info::keepalive_instance()
 {
-	std::unique_lock<std::mutex> lock(mutex_instance_);
-#if 0
+	std::lock_guard<std::mutex> lock(mutex_instance_);
+
+	std::string install_path;
 	/////////////////////////////////////////////////////////////
 	// keep alive of meta
 	for (auto &instance:vec_meta_instance)
 	{
-		if(instance->pullup_wait<0)
-			continue;
-		else if(instance->pullup_wait>0)
+		if(instance->pullup_wait>0)
 		{
 			instance->pullup_wait -= thread_work_interval;
 			if(instance->pullup_wait<0)
@@ -545,54 +604,11 @@ void Instance_info::keepalive_instance()
 			continue;
 		}
 	
-		int retry = stmt_retries;
-		auto conn = instance->mysql_conn;
-		
-		while(retry--)
+		if(!get_mysql_alive(instance->mysql_conn, instance->ip, instance->port,instance->user,instance->pwd))
 		{
-			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
-			{
-				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
-				continue;
-			}
-			
-			if(conn->send_stmt(SQLCOM_SELECT, "select version()"))
-				continue;
-		
-			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(conn->result)))
-			{
-				//syslog(Logger::INFO, "row[]=%s",row[0]);
-				if (strcasestr(row[0], "kunlun-storage"))
-					break;
-			}
-			else
-			{
-				continue;
-			}
-		
-			break;
-		}
-		conn->free_mysql_result();
-
-		if(retry<0)
-		{
-			syslog(Logger::ERROR, "meta_instance ip=%s, port=%d, retry=%d",instance->ip.c_str(),instance->port,retry);
+			syslog(Logger::ERROR, "meta_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-
-			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(instance->port);
-			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
-			//system(cmd.c_str());
-			
-			FILE* pfd;
-			pfd = popen(cmd.c_str(), "r");
-			if(!pfd)
-			{
-				syslog(Logger::ERROR, "pullup instance error %s" ,cmd.c_str());
-				return;
-			}
-			pclose(pfd);
+			pullup_mysql(instance->port);
 		}
 	}
 
@@ -600,9 +616,7 @@ void Instance_info::keepalive_instance()
 	// keep alive of storage
 	for (auto &instance:vec_storage_instance)
 	{
-		if(instance->pullup_wait<0)
-			continue;
-		else if(instance->pullup_wait>0)
+		if(instance->pullup_wait>0)
 		{
 			instance->pullup_wait -= thread_work_interval;
 			if(instance->pullup_wait<0)
@@ -610,54 +624,11 @@ void Instance_info::keepalive_instance()
 			continue;
 		}
 	
-		int retry = stmt_retries;
-		auto conn = instance->mysql_conn;
-		
-		while(retry--)
+		if(!get_mysql_alive(instance->mysql_conn, instance->ip, instance->port,instance->user,instance->pwd))
 		{
-			if(conn->connect(NULL, instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
-			{
-				syslog(Logger::ERROR, "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", 
-								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
-				continue;
-			}
-			
-			if(conn->send_stmt(SQLCOM_SELECT, "select version()"))
-				continue;
-		
-			MYSQL_ROW row;
-			if ((row = mysql_fetch_row(conn->result)))
-			{
-				//syslog(Logger::INFO, "row[]=%s",row[0]);
-				if (strcasestr(row[0], "kunlun-storage"))
-					break;
-			}
-			else
-			{
-				continue;
-			}
-		
-			break;
-		}
-		conn->free_mysql_result();
-
-		if(retry<0)
-		{
-			syslog(Logger::ERROR, "storage_instance ip=%s, port=%d, retry=%d",instance->ip.c_str(),instance->port,retry);
+			syslog(Logger::ERROR, "storage_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-
-			std::string cmd = "cd " + mysql_install_path + ";./startmysql.sh " + std::to_string(instance->port);
-			syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
-			//system(cmd.c_str());
-			
-			FILE* pfd;
-			pfd = popen(cmd.c_str(), "r");
-			if(!pfd)
-			{
-				syslog(Logger::ERROR, "pullup instance error %s" ,cmd.c_str());
-				return;
-			}
-			pclose(pfd);
+			pullup_mysql(instance->port);
 		}
 	}
 
@@ -665,9 +636,7 @@ void Instance_info::keepalive_instance()
 	// keep alive of computer
 	for (auto &instance:vec_computer_instance)
 	{
-		if(instance->pullup_wait<0)
-			continue;
-		else if(instance->pullup_wait>0)
+		if(instance->pullup_wait>0)
 		{
 			instance->pullup_wait -= thread_work_interval;
 			if(instance->pullup_wait<0)
@@ -675,52 +644,111 @@ void Instance_info::keepalive_instance()
 			continue;
 		}
 
-		int retry = stmt_retries;
-		auto conn = instance->pgsql_conn;
-		
-		while(retry--)
+		if(!get_pgsql_alive(instance->pgsql_conn, instance->ip, instance->port,instance->user,instance->pwd))
 		{
-			if(conn->connect("postgres", instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str()))
-			{
-				syslog(Logger::ERROR, "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", 
-								instance->ip.c_str(), instance->port, instance->user.c_str(), instance->pwd.c_str());
-				continue;
-			}
-		
-			if(conn->send_stmt(PG_COPYRES_TUPLES, "select version()"))
-				continue;
-
-			if(PQntuples(conn->result) == 1)
-			{
-				//syslog(Logger::INFO, "presult = %s", PQgetvalue(conn->result,0,0));
-				if (strcasestr(PQgetvalue(conn->result,0,0), "PostgreSQL"))
-					break;
-			}
-			
-			break;
-		}
-		conn->free_pgsql_result();
-
-		if(retry<0)
-		{
-			syslog(Logger::ERROR, "computer_instance ip=%s, port=%d, retry=%d",instance->ip.c_str(),instance->port,retry);
+			syslog(Logger::ERROR, "computer_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-
-			std::string cmd = "cd " + pgsql_install_path + ";python2 start_pg.py port=" + std::to_string(instance->port);
-			syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
-			//system(cmd.c_str());
-			
-			FILE* pfd;
-			pfd = popen(cmd.c_str(), "r");
-			if(!pfd)
-			{
-				syslog(Logger::ERROR, "pullup instance error %s" ,cmd.c_str());
-				return;
-			}
-			pclose(pfd);
+			pullup_pgsql(instance->port);
 		}
 	}
-#endif
+}
+
+bool Instance_info::get_path_used(std::string &path, uint64_t &used)
+{
+	bool ret = false;
+	FILE* pfd = NULL;
+
+	char *p;
+	char buf[256];
+	std::string str_cmd;
+
+	str_cmd = "du --max-depth=0 " + path;
+	syslog(Logger::INFO, "get_path_used str_cmd : %s",str_cmd.c_str());
+
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	p = strchr(buf, 0x09);	//asii ht
+	if(p == NULL)
+		goto end;
+
+	*p = '\0';
+	used = atol(buf)>>10;		//Mbyte
+	ret = true;
+
+end:
+	if(pfd != NULL)
+		pclose(pfd);
+
+	return ret;
+}
+
+bool Instance_info::get_path_free(std::string &path, uint64_t &free)
+{
+	bool ret = false;
+	FILE* pfd = NULL;
+
+	char *p, *q;
+	char buf[256];
+	std::string str_cmd;
+
+	str_cmd = "df " + path;
+	syslog(Logger::INFO, "get_path_free str_cmd : %s",str_cmd.c_str());
+
+	pfd = popen(str_cmd.c_str(), "r");
+    if(!pfd)
+        goto end;
+
+	//first line
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+
+	//second line
+	if(fgets(buf, 256, pfd) == NULL)
+		goto end;
+	
+	//first space
+	p = strchr(buf, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+	
+	//second space
+	p = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+
+	//third space
+	p = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	while(*p == 0x20)
+		p++;
+
+	//fourth space
+	q = strchr(p, 0x20);
+	if(p == NULL)
+		goto end;
+
+	*q = '\0';
+	free = atol(p)>>10;		//Mbyte
+	ret = true;
+
+end:
+	if(pfd != NULL)
+		pclose(pfd);
+
+	return ret;
 }
 
 void Instance_info::trimString(std::string &str)
@@ -733,14 +761,12 @@ void Instance_info::trimString(std::string &str)
     	str = str.substr(s,e-s+1);
 }
 
-void Instance_info::set_path_space(char* paths)
+bool Instance_info::get_vec_path(std::vector<std::string> &vec_path, std::string &paths)
 {
-	char *cStart, *cEnd;
+	const char *cStart, *cEnd;
 	std::string path;
 
-	vec_path_space.clear();
-
-	cStart = paths;
+	cStart = paths.c_str();
 	while(*cStart!='\0')
 	{
 		cEnd = strchr(cStart, ';');
@@ -749,7 +775,7 @@ void Instance_info::set_path_space(char* paths)
 			path = std::string(cStart, strlen(cStart));
 			trimString(path);
 			if(path.length())
-				vec_path_space.push_back(std::make_pair(path, 0));
+				vec_path.emplace_back(path);
 			break;
 		}
 		else
@@ -757,23 +783,113 @@ void Instance_info::set_path_space(char* paths)
 			path = std::string(cStart, cEnd-cStart);
 			trimString(path);
 			if(path.length())
-				vec_path_space.push_back(std::make_pair(path, 0));
+				vec_path.emplace_back(path);
 			cStart = cEnd+1;
 		}
 	}
 
-	for(auto it=vec_path_space.begin(); it!=vec_path_space.end(); )
+	return (vec_path.size() > 0);
+}
+
+bool Instance_info::set_path_space(std::vector<std::string> &vec_paths, std::string &result)
+{
+	bool ret = true;
+	std::string info,path_used;
+	uint64_t u_used,u_free;
+
+	std::vector<std::string> vec_sub_path;
+	vec_sub_path.emplace_back("/instance_data/data_dir_path");
+	vec_sub_path.emplace_back("/instance_data/log_dir_path");
+	vec_sub_path.emplace_back("/instance_data/innodb_log_dir_path");
+	vec_sub_path.emplace_back("/instance_data/comp_datadir");
+
+	std::vector<std::string> vec_path_index;
+	vec_path_index.emplace_back("paths0");
+	vec_path_index.emplace_back("paths1");
+	vec_path_index.emplace_back("paths2");
+	vec_path_index.emplace_back("paths3");
+
+	vec_vec_path_used_free.clear();
+
+	for(int i=0; i<4; i++)
 	{
-		uint64_t used,free;
-		if(Job::get_instance()->get_path_size((*it).first, used, free))
+		std::vector<std::string> vec_path;
+		if(!get_vec_path(vec_path, vec_paths[i]))
 		{
-			(*it).second = free;
-			it++;
+			if(info.length()>0)
+				info += ";" + vec_paths[i];
+			else
+				info = vec_paths[i];
+
+			ret = false;
+			continue;
 		}
-		else
+		
+		std::vector<Tpye_Path_Used_Free> vec_path_used_free;
+		for(auto &path:vec_path)
 		{
-			it = vec_path_space.erase(it);
+			if(!get_path_free(path,u_free))
+			{
+				if(info.length()>0)
+					info += ";" + path;
+				else
+					info = path;
+
+				ret = false;
+				continue;
+			}
+			else
+			{
+				path_used = path + vec_sub_path[i];
+				if(!get_path_used(path_used,u_used))
+				{
+					u_used = 0;
+				}
+			}
+
+			vec_path_used_free.emplace_back(std::make_tuple(path, u_used, u_free));
+		}
+		vec_vec_path_used_free.emplace_back(vec_path_used_free);
+	}
+
+	//json for return
+	cJSON *root = cJSON_CreateObject();
+	cJSON *item;
+	cJSON *item_sub;
+	cJSON *item_paths;
+	char *cjson = NULL;
+
+	if(ret)
+	{
+		cJSON_AddStringToObject(root, "result", "succeed");
+		cJSON_AddStringToObject(root, "info", "");
+
+		for(int i=0; i<4; i++)
+		{
+			item_paths = cJSON_CreateArray();
+			cJSON_AddItemToObject(root, vec_path_index[i].c_str(), item_paths);
+			for(auto &path_used_free: vec_vec_path_used_free[i])
+			{
+				item_sub = cJSON_CreateObject();
+				cJSON_AddItemToArray(item_paths, item_sub);
+				cJSON_AddStringToObject(item_sub, "path", std::get<0>(path_used_free).c_str());
+				cJSON_AddNumberToObject(item_sub, "used", std::get<1>(path_used_free));
+				cJSON_AddNumberToObject(item_sub, "free", std::get<2>(path_used_free));
+			}
 		}
 	}
+	else
+	{
+		info += " is error";
+		cJSON_AddStringToObject(root, "result", "error");
+		cJSON_AddStringToObject(root, "info", info.c_str());
+	}
+
+	cjson = cJSON_Print(root);
+	result = cjson;
+	cJSON_Delete(root);
+	free(cjson);
+
+	return ret;
 }
 

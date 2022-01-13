@@ -145,7 +145,7 @@ void Thread_manager::start_worker_thread()
 		}
 
 		thd->set_pthread_hdl(hdl);
-		thrds.push_back(thd);
+		thrds.emplace_back(thd);
 	}
 #endif
 }
