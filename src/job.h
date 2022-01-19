@@ -40,7 +40,6 @@ JOB_INSTALL_STORAGE,
 JOB_INSTALL_COMPUTER,
 JOB_DELETE_STORAGE, 
 JOB_DELETE_COMPUTER,
-JOB_GROUP_SEEDS,
 JOB_BACKUP_SHARD, 
 JOB_RESTORE_STORAGE, 
 JOB_RESTORE_COMPUTER, 
@@ -96,6 +95,7 @@ public:
 	bool get_mem_used(std::string &used, std::string &free);
 	bool get_user_path(std::string &path);
 
+	bool check_timestamp();
 	bool check_local_ip(std::string &ip);
 	void get_local_ip();
 	void get_user_name();
@@ -131,7 +131,6 @@ public:
 	void job_install_computer(cJSON *root);
 	void job_delete_storage(cJSON *root);
 	void job_delete_computer(cJSON *root);
-	void job_group_seeds(cJSON *root);
 
 	void job_backup_shard(cJSON *root);
 	void job_restore_storage(cJSON *root);

@@ -74,8 +74,6 @@ int System::create_instance(const std::string&cfg_path)
 	if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
 		goto end;
 
-	Instance_info::get_instance()->get_local_instance();
-
 end:
 	return ret;
 }

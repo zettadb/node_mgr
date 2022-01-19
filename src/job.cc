@@ -34,6 +34,7 @@ int Job::do_exit = 0;
 int64_t num_job_threads = 3;
 std::string http_cmd_version;
 
+extern std::string cluster_mgr_http_ip;
 extern int64_t cluster_mgr_http_port;
 extern int64_t node_mgr_http_port;
 extern std::string http_upload_path;
@@ -827,6 +828,54 @@ bool Job::check_local_ip(std::string &ip)
 	return false;
 }
 
+bool Job::check_timestamp()
+{
+	cJSON *root;
+	cJSON *item;
+	char *cjson;
+	std::string timestamp;
+	get_timestamp(timestamp);
+
+	root = cJSON_CreateObject();
+	cJSON_AddStringToObject(root, "job_type", "check_timestamp");
+	cJSON_AddStringToObject(root, "timestamp", timestamp.c_str());
+	cjson = cJSON_Print(root);
+	cJSON_Delete(root);
+	
+	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
+	
+	std::string result_str;
+	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
+	free(cjson);
+	
+	if(ret == 0)
+	{
+		//syslog(Logger::INFO, "result_str timestamp=%s", result_str.c_str());
+		cJSON *ret_root;
+		cJSON *ret_item;
+
+		ret_root = cJSON_Parse(result_str.c_str());
+		if(ret_root == NULL)
+			return false;
+
+		ret_item = cJSON_GetObjectItem(ret_root, "result");
+		if(ret_item == NULL || ret_item->valuestring == NULL)
+		{
+			cJSON_Delete(ret_root);
+			return false;
+		}
+		
+		if(strcmp(ret_item->valuestring, "true")==0)
+		{
+			cJSON_Delete(ret_root);
+			return true;
+		}
+		cJSON_Delete(ret_root);
+	}
+
+	return false;
+}
+
 void Job::get_local_ip()
 {
 	int fd, num;
@@ -1106,7 +1155,7 @@ bool Job::update_variables(std::string &ip, int port, std::string &user, std::st
 
 	int retry = stmt_retries;
 	MYSQL_CONN mysql_conn;
-	std::string str_sql = "set global " + name + "='" + value + "'";
+	std::string str_sql = "set persist " + name + "='" + value + "'";
 	
 	while(retry--)
 	{
@@ -2638,149 +2687,6 @@ end:
 	System::get_instance()->set_auto_pullup_working(true);
 }
 
-void Job::job_group_seeds(cJSON *root)
-{
-	std::string job_id;
-	std::string job_result;
-	std::string job_info;
-
-	cJSON *item;
-	int port;
-	std::string ip,user,pwd,variables,group_seeds;
-	std::string cnf_path, cnf_buf;
-	size_t pos1,pos2;
-
-	variables = "group_replication_group_seeds";
-	
-	item = cJSON_GetObjectItem(root, "job_id");
-	if(item == NULL || item->valuestring == NULL)
-	{
-		syslog(Logger::ERROR, "get_job_id error");
-		return;
-	}
-	job_id = item->valuestring;
-
-	job_result = "busy";
-	job_info = "update group seeds start";
-	update_jobid_status(job_id, job_result, job_info);
-	syslog(Logger::INFO, "%s", job_info.c_str());
-
-	item = cJSON_GetObjectItem(root, "ip");
-	if(item == NULL || item->valuestring == NULL)
-	{
-		job_info = "get ip error";
-		goto end;
-	}
-	ip = item->valuestring;
-	
-	item = cJSON_GetObjectItem(root, "port");
-	if(item == NULL)
-	{
-		job_info = "get port error";
-		goto end;
-	}
-	port = item->valueint;
-
-	item = cJSON_GetObjectItem(root, "user");
-	if(item == NULL || item->valuestring == NULL)
-	{
-		job_info = "get user error";
-		goto end;
-	}
-	user = item->valuestring;
-
-	item = cJSON_GetObjectItem(root, "password");
-	if(item == NULL || item->valuestring == NULL)
-	{
-		job_info = "get password error";
-		goto end;
-	}
-	pwd = item->valuestring;
-
-	item = cJSON_GetObjectItem(root, "group_seeds");
-	if(item == NULL || item->valuestring == NULL)
-	{
-		job_info = "get group_seeds error";
-		goto end;
-	}
-	group_seeds = item->valuestring;
-
-	if(!check_local_ip(ip))
-	{
-		job_info = ip + " is not local ip";
-		goto end;
-	}
-
-	////////////////////////////////////////////////////////
-	// get cnf 
-	if(!get_cnf_path(ip, port, user, pwd, cnf_path))
-	{
-		job_info = "get_cnf_path error";
-		goto end;
-	}
-
-	////////////////////////////////////////////////////////
-	// read buf 
-	if(!job_read_file(cnf_path, cnf_buf))
-	{
-		job_info = "job_read_file error";
-		goto end;
-	}
-
-	////////////////////////////////////////////////////////
-	//update group seeds to cnf
-	pos1 = cnf_buf.find(variables);
-	if(pos1 == std::string::npos)
-	{
-		job_info = "find group_seeds0 error";
-		goto end;
-	}
-
-	pos1 = cnf_buf.find("\"", pos1);
-	if(pos1 == std::string::npos)
-	{
-		job_info = "find group_seeds1 error";
-		goto end;
-	}
-	pos1 += 1;
-
-	pos2 = cnf_buf.find("\"", pos1);
-	if(pos2 == std::string::npos)
-	{
-		job_info = "find group_seeds2 error";
-		goto end;
-	}
-
-	cnf_buf.replace(pos1, pos2-pos1, group_seeds);
-
-	////////////////////////////////////////////////////////
-	// save buf 
-	if(!job_save_file(cnf_path, (char*)cnf_buf.c_str()))
-	{
-		job_info = "job_save_file error";
-		goto end;
-	}
-
-	////////////////////////////////////////////////////////
-	//update group seeds to storage instance variables
-	if(!update_variables(ip, port, user, pwd, variables, group_seeds))
-	{
-		job_info = "update_variables error";
-		goto end;
-	}
-
-	job_result = "succeed";
-	job_info = "update group seeds succeed";
-	update_jobid_status(job_id, job_result, job_info);
-	syslog(Logger::INFO, "%s", job_info.c_str());
-	return;
-
-end:
-	job_result = "error";
-	update_jobid_status(job_id, job_result, job_info);
-	syslog(Logger::ERROR, "%s", job_info.c_str());
-}
-
 void Job::job_backup_shard(cJSON *root)
 {
 	std::string job_id;
@@ -3309,8 +3215,6 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_DELETE_STORAGE;
 	else if(strcmp(str, "delete_computer")==0)
 		job_type = JOB_DELETE_COMPUTER;
-	else if(strcmp(str, "group_seeds")==0)
-		job_type = JOB_GROUP_SEEDS;
 	else if(strcmp(str, "backup_shard")==0)
 		job_type = JOB_BACKUP_SHARD;
 	else if(strcmp(str, "restore_storage")==0)
@@ -3447,10 +3351,6 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_DELETE_COMPUTER)
 	{
 		job_delete_computer(root);
-	}
-	else if(job_type == JOB_GROUP_SEEDS)
-	{
-		job_group_seeds(root);
 	}
 	else if(job_type == JOB_BACKUP_SHARD)
 	{
