@@ -1682,133 +1682,375 @@ bool Job::job_read_file(std::string &path, std::string &str)
 	return true;
 }
 
-void Job::job_stop_storage(int port)
+bool Job::job_control_storage(int port, int control)
 {
+	bool ret = false;
 	FILE* pfd;
-	char* line;
 	char buf[256];
 
-	std::string cmd, process_id;
+	std::string cmd, instance_path;
 
-	cmd = "ps -ef | grep -v grep | grep -v mysqld_safe | grep /storage/" + std::to_string(port);
-	syslog(Logger::INFO, "job_stop_storage cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
-	{
-		syslog(Logger::ERROR, "job_stop_storage error %s", cmd.c_str());
-		return;
-	}
-	line = fgets(buf, 256, pfd);
-	pclose(pfd);
+	/////////////////////////////////////////////////////////////
+	instance_path = instance_binaries_path + "/storage/" + std::to_string(port);
+	cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
 
-	if(line != NULL)
+	if(control == 1)
 	{
-		char *p, *q;
-		p = strchr(line, 0x20);
-		if(p!=NULL)
+		// stop
+		cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
+		cmd += "./stopmysql.sh " + std::to_string(port);
+		syslog(Logger::INFO, "job_control_storage cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
 		{
-			while(*p==0x20)
-				p++;
-
-			q = strchr(p, 0x20);
-			if(q!=NULL)
-			{
-				while(*q==0x20)
-					q++;
-
-				q = strchr(q, 0x20);
-				if(q!=NULL)
-				{
-					process_id = std::string(p, q-p);
-					while(p!=q)
-					{
-						if(*p==0x20 || (*p>='0' && *p <= '9'))
-							p++;
-						else
-							return;
-					}
-
-					cmd = "kill -9 " + process_id;
-					syslog(Logger::INFO, "job_stop_storage cmd %s", cmd.c_str());
-
-					pfd = popen(cmd.c_str(), "r");
-					if(!pfd)
-					{
-						syslog(Logger::ERROR, "job_stop_storage error %s", cmd.c_str());
-						return;
-					}
-					while(fgets(buf, 256, pfd)!=NULL)
-					{
-						//if(strcasestr(buf, "error") != NULL)
-							syslog(Logger::INFO, "%s", buf);
-					}
-					pclose(pfd);
-				}
-			}
+			syslog(Logger::ERROR, "stop error %s" ,cmd.c_str());
+			goto end;
 		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+		return true;
 	}
+	else if(control == 2)
+	{
+		// start
+		cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
+		cmd += "./startmysql.sh " + std::to_string(port);
+		syslog(Logger::INFO, "job_control_storage cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "start error %s" ,cmd.c_str());
+			goto end;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+		return true;
+	}
+	else if(control == 3)
+	{
+		// stop
+		cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
+		cmd += "./stopmysql.sh " + std::to_string(port);
+		syslog(Logger::INFO, "job_control_storage cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "stop error %s" ,cmd.c_str());
+			goto end;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+
+		sleep(1);
+
+		// start
+		cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
+		cmd += "./startmysql.sh " + std::to_string(port);
+		syslog(Logger::INFO, "job_control_storage cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "start error %s" ,cmd.c_str());
+			goto end;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+		return true;
+	}
+
+end:
+	return ret;
 }
 
-void Job::job_stop_computer(int port)
+bool Job::job_control_computer(int port, int control)
 {
+	bool ret = false;
 	FILE* pfd;
-	char* line;
 	char buf[256];
 
-	std::string cmd, process_id;
+	cJSON *root_file = NULL;
+	cJSON *item;
+	cJSON *item_sub;
 
-	cmd = "ps -ef | grep -v grep | grep /computer/" + std::to_string(port);
-	syslog(Logger::INFO, "job_stop_computer cmd %s", cmd.c_str());
-	
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
+	int nodes;
+	std::string cmd, pathdir, instance_path, jsonfile_path, jsonfile_buf;
+
+	/////////////////////////////////////////////////////////////
+	// read json file from path/dba_tools
+	instance_path = instance_binaries_path + "/computer/" + std::to_string(port);
+	jsonfile_path = instance_path + "/" + computer_prog_package_name + "/scripts/pgsql_comp.json";
+
+	if(control != 2)
 	{
-		syslog(Logger::ERROR, "job_stop_computer error %s", cmd.c_str());
+		if(!job_read_file(jsonfile_path, jsonfile_buf))
+		{
+			syslog(Logger::ERROR, "job_read_file error");
+			goto end;
+		}
+
+		root_file = cJSON_Parse(jsonfile_buf.c_str());
+		if(root_file == NULL)
+		{
+			syslog(Logger::ERROR, "file cJSON_Parse error");
+			goto end;
+		}
+
+		nodes = cJSON_GetArraySize(root_file);
+
+		/////////////////////////////////////////////////////////////
+		//find ip and port and delete pathdir
+		for(int i=0; i<nodes; i++)
+		{
+			int port_sub;
+
+			item_sub = cJSON_GetArrayItem(root_file,i);
+			if(item_sub == NULL)
+			{
+				syslog(Logger::ERROR, "get sub node error");
+				goto end;
+			}
+			
+			item = cJSON_GetObjectItem(item_sub, "port");
+			if(item == NULL)
+			{
+				syslog(Logger::ERROR, "get sub port error");
+				goto end;
+			}
+			port_sub = item->valueint;
+
+			if(port_sub != port)
+				continue;
+
+			//////////////////////////////
+			//get datadir
+			item = cJSON_GetObjectItem(item_sub, "datadir");
+			if(item == NULL)
+			{
+				syslog(Logger::ERROR, "get sub datadir error");
+				goto end;
+			}
+			pathdir = item->valuestring;
+
+			break;
+		}
+		cJSON_Delete(root_file);
+		root_file = NULL;
+	}
+
+	/////////////////////////////////////////////////////////////
+	if(control == 1)
+	{
+		// stop computer cmd
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/bin;";
+		cmd += "./pg_ctl -D " + pathdir + " stop";
+		syslog(Logger::INFO, "stop_computer cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "stop error %s" ,cmd.c_str());
+			goto end;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+		return true;
+	}
+	else if(control == 2)
+	{
+		// start
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts; python2 start_pg.py port=" + std::to_string(port);
+		syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "start error %s" ,cmd.c_str());
+			goto end;
+		}
+		pclose(pfd);
+		return true;
+	}
+	else if(control == 3)
+	{
+		// stop computer cmd
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/bin;";
+		cmd += "./pg_ctl -D " + pathdir + " stop";
+		syslog(Logger::INFO, "stop_computer cmd %s", cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "stop error %s" ,cmd.c_str());
+			goto end;
+		}
+		while(fgets(buf, 256, pfd)!=NULL)
+		{
+			//if(strcasestr(buf, "error") != NULL)
+				syslog(Logger::INFO, "%s", buf);
+		}
+		pclose(pfd);
+
+		sleep(1);
+
+		// start
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts; python2 start_pg.py port=" + std::to_string(port);
+		syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
+		
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "start error %s" ,cmd.c_str());
+			goto end;
+		}
+		pclose(pfd);
+
+		return true;
+	}
+
+end:
+	if(root_file!=NULL)
+		cJSON_Delete(root_file);
+
+	return ret;
+}
+
+void Job::job_control_instance(cJSON *root)
+{
+	std::string job_id;
+	std::string job_result;
+	std::string job_info;
+	
+	cJSON *item;
+	int port;
+	std::string ip, type, control;
+	bool ret;
+	
+	item = cJSON_GetObjectItem(root, "job_id");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		syslog(Logger::ERROR, "get_job_id error");
 		return;
 	}
-	line = fgets(buf, 256, pfd);
-	pclose(pfd);
+	job_id = item->valuestring;
 
-	if(line != NULL)
+	job_result = "busy";
+	job_info = "control instance start";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+
+	item = cJSON_GetObjectItem(root, "control");
+	if(item == NULL || item->valuestring == NULL)
 	{
-		char *p, *q;
-		p = strchr(line, 0x20);
-		if(p!=NULL)
-		{
-			while(*p==0x20)
-				p++;
-
-			q = strchr(p, 0x20);
-			if(q!=NULL)
-			{
-				process_id = std::string(p, q-p);
-				while(p!=q)
-				{
-					if(*p>='0' && *p <= '9')
-						p++;
-					else
-						return;
-				}
-
-				cmd = "kill -9 " + process_id;
-				syslog(Logger::INFO, "job_stop_computer cmd %s", cmd.c_str());
-
-				pfd = popen(cmd.c_str(), "r");
-				if(!pfd)
-				{
-					syslog(Logger::ERROR, "job_stop_computer error %s", cmd.c_str());
-					return;
-				}
-				while(fgets(buf, 256, pfd)!=NULL)
-				{
-					//if(strcasestr(buf, "error") != NULL)
-						syslog(Logger::INFO, "%s", buf);
-				}
-				pclose(pfd);
-			}
-		}
+		job_info = "get control error";
+		goto end;
 	}
+	control = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "type");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get type error";
+		goto end;
+	}
+	type = item->valuestring;
+
+	item = cJSON_GetObjectItem(root, "ip");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get ip error";
+		goto end;
+	}
+	ip = item->valuestring;
+	
+	item = cJSON_GetObjectItem(root, "port");
+	if(item == NULL)
+	{
+		job_info = "get port error";
+		goto end;
+	}
+	port = item->valueint;
+
+	if(!check_local_ip(ip))
+	{
+		job_info = ip + " is not local ip";
+		goto end;
+	}
+
+	System::get_instance()->set_auto_pullup_working(false);
+
+	/////////////////////////////////////////////////////////////
+	if(type == "storage")
+	{
+		if(control == "stop")
+		{
+			Instance_info::get_instance()->remove_storage_instance(ip, port);
+			ret = job_control_storage(port, 1);
+		}
+		else if(control == "start")
+			ret = job_control_storage(port, 2);
+		else if(control == "restart")
+			ret = job_control_storage(port, 3);
+	}
+	else if(type == "computer")
+	{
+		if(control == "stop")
+		{
+			Instance_info::get_instance()->remove_storage_instance(ip, port);
+			ret = job_control_computer(port, 1);
+		}
+		else if(control == "start")
+			ret = job_control_computer(port, 2);
+		else if(control == "restart")
+			ret = job_control_computer(port, 3);
+	}
+	else
+	{
+		job_info = "type item error";
+		goto end;
+	}
+
+	if(!ret)
+	{
+		job_info = "control instance error";
+		goto end;
+	}
+
+	job_result = "succeed";
+	job_info = "control instance succeed";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::INFO, "%s", job_info.c_str());
+	System::get_instance()->set_auto_pullup_working(true);
+	return;
+
+end:
+	job_result = "error";
+	update_jobid_status(job_id, job_result, job_info);
+	syslog(Logger::ERROR, "%s", job_info.c_str());
+	System::get_instance()->set_auto_pullup_working(true);
 }
 
 void Job::job_install_storage(cJSON *root)
@@ -1921,26 +2163,7 @@ void Job::job_install_storage(cJSON *root)
 	//////////////////////////////
 	//check exist instance and kill
 	if(access(instance_path.c_str(), F_OK) == 0)
-	{
-		cmd = "cd " + instance_path + "/" + storage_prog_package_name + "/dba_tools;";
-		cmd += "./stopmysql.sh " + std::to_string(port);
-		syslog(Logger::INFO, "system stop_storage cmd %s", cmd.c_str());
-		
-		pfd = popen(cmd.c_str(), "r");
-		if(!pfd)
-		{
-			syslog(Logger::ERROR, "job_stop_storage error %s", cmd.c_str());
-			return;
-		}
-		while(fgets(buf, 256, pfd)!=NULL)
-		{
-			//if(strcasestr(buf, "error") != NULL)
-				syslog(Logger::INFO, "%s", buf);
-		}
-		pclose(pfd);
-
-		//job_stop_storage(port);
-	}
+		job_control_storage(port, 1);
 
 	//////////////////////////////
 	//mkdir instance_path
@@ -2186,9 +2409,7 @@ void Job::job_install_computer(cJSON *root)
 	//////////////////////////////
 	//check exist instance and kill
 	if(access(instance_path.c_str(), F_OK) == 0)
-	{
-		job_stop_computer(port);
-	}
+		job_control_computer(port, 1);
 
 	//////////////////////////////
 	//mkdir instance_path
@@ -2368,9 +2589,6 @@ void Job::job_delete_storage(cJSON *root)
 			syslog(Logger::INFO, "%s", buf);
 	}
 	pclose(pfd);
-
-	//force kill
-	//job_stop_storage(port);
 
 	/////////////////////////////////////////////////////////////
 	// read json file from path/dba_tools
@@ -2644,9 +2862,6 @@ void Job::job_delete_computer(cJSON *root)
 		}
 		pclose(pfd);
 		syslog(Logger::INFO, "stop computer end");
-
-		//force kill
-		//job_stop_computer(port);
 
 		//rm file in pathdir
 		cmd = "rm -rf " + pathdir;
@@ -3207,6 +3422,8 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_PATH_SPACE;
 	else if(strcmp(str, "auto_pullup")==0)
 		job_type = JOB_AUTO_PULLUP;
+	else if(strcmp(str, "control_instance")==0)
+		job_type = JOB_CONTROL_INSTANCE;
 	else if(strcmp(str, "install_storage")==0)
 		job_type = JOB_INSTALL_STORAGE;
 	else if(strcmp(str, "install_computer")==0)
@@ -3335,6 +3552,10 @@ void Job::job_handle(std::string &job)
 	else if(job_type == JOB_UPDATE_INSTANCES)
 	{
 		Instance_info::get_instance()->get_local_instance(root);
+	}
+	else if(job_type == JOB_CONTROL_INSTANCE)
+	{
+		job_control_instance(root);
 	}
 	else if(job_type == JOB_INSTALL_STORAGE)
 	{

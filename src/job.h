@@ -36,6 +36,7 @@ JOB_GET_PATH_SPACE,
 JOB_UPDATE_INSTANCES,
 JOB_AUTO_PULLUP,
 JOB_MACHINE_PATH, 
+JOB_CONTROL_INSTANCE, 
 JOB_INSTALL_STORAGE, 
 JOB_INSTALL_COMPUTER,
 JOB_DELETE_STORAGE, 
@@ -124,9 +125,10 @@ public:
 	bool job_system_cmd(std::string &cmd);
 	bool job_save_file(std::string &path, char* buf);
 	bool job_read_file(std::string &path, std::string &str);
-	void job_stop_storage(int port);
-	void job_stop_computer(int port);
+	bool job_control_storage(int port, int control);
+	bool job_control_computer(int port, int control);
 
+	void job_control_instance(cJSON *root);
 	void job_install_storage(cJSON *root);
 	void job_install_computer(cJSON *root);
 	void job_delete_storage(cJSON *root);
