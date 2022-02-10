@@ -1,0 +1,2 @@
+#define Node_manager_VERSION_MAJOR @Node_manager_VERSION_MAJOR@
+#define Node_manager_VERSION_MINOR @Node_manager_VERSION_MINOR@

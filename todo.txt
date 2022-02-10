@@ -1,0 +1,4 @@
+1.Daemonize the node_mng process
+2.use popen to execute the command. if do so, we can determin what to do base on the execute output
+3.use LOCK_FREE queue instead of the std::queue and cond_var to dispatch the command (boost) and simplify the interaction between threads
+4.some environment related vairables such as `install_path`, use the config file to specify is better.

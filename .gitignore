@@ -1,0 +1,8 @@
+*.o
+.vscode/*
+build/*
+.clang_complete
+CsdbBuild.sh
+GPATH
+GRTAGS
+GTAGS
