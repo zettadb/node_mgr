@@ -147,9 +147,11 @@ int Logger::generate_log_fn(const std::string&lfp, std::string&fn)
 	time_t now = time(NULL);
 	localtime_r(&now, &tmnow);
 
-	int len = snprintf(buf, sizeof(buf), "-%d-%.2d-%.2d_%.2d%.2d%.2d",
-		tmnow.tm_year + 1900, tmnow.tm_mon + 1, tmnow.tm_mday, tmnow.tm_hour,
-		tmnow.tm_min, tmnow.tm_sec);
+	//int len = snprintf(buf, sizeof(buf), "-%d-%.2d-%.2d_%.2d%.2d%.2d",
+	//	tmnow.tm_year + 1900, tmnow.tm_mon + 1, tmnow.tm_mday, tmnow.tm_hour,
+	//	tmnow.tm_min, tmnow.tm_sec);
+	int len = snprintf(buf, sizeof(buf), "-%d-%.2d-%.2d",
+		tmnow.tm_year + 1900, tmnow.tm_mon + 1, tmnow.tm_mday);
 	Assert(len < sizeof(buf));
 	fn += buf;
 

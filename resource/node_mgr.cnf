@@ -24,7 +24,7 @@ thread_work_interval = 3
 max_log_file_size = 100
 
 # log file path and name
-log_file = ./sys_node_mgr.log
+log_file = ../log/sys_node_mgr.log
 
 # NO. of times a SQL statement is resent for execution when MySQL connection broken.
 statement_retries = 3
@@ -56,6 +56,9 @@ meta_user = pgx
 # meta data server user's password 
 meta_pwd = pgx_pwd
 
+# Net Interface device name 
+dev_interface = eno1 
+
 # cluster_mgr http server ip address
 cluster_mgr_http_ip = 192.168.0.135
 
@@ -64,6 +67,9 @@ cluster_mgr_http_port = 6001
 
 # node_mgr http server port
 node_mgr_http_port = 5010
+
+# node_mgr brpc http server port
+node_mgr_brpc_http_port = 5011
 
 # http cmd version
 http_cmd_version = 0.9

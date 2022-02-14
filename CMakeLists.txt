@@ -26,21 +26,65 @@ elseif (NOT DEFINED ZETTALIB_LIB_PATH)
 endif()
 
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
-link_directories(${PROJECT_SOURCE_DIR}/vendor/lib)
+link_directories(${PROJECT_SOURCE_DIR}/src/vendor/lib)
 link_directories(${ZETTALIB_LIB_PATH})
-add_subdirectory(server_http)
+
+add_subdirectory(src/server_http)
+add_subdirectory(src/request_dealer)
+
 add_executable(node_mgr
-config.cc log.cc main.cc os.cc sys.cc thread_manager.cc mysql_conn.cc pgsql_conn.cc instance_info.cc 
-http_server.cc http_client.cc job.cc cjson.cc)
-configure_file(sys_config.h.in sys_config.h)
+  src/config.cc 
+  src/log.cc 
+  src/main.cc 
+  src/os.cc 
+  src/sys.cc 
+  src/thread_manager.cc 
+  src/mysql_conn.cc 
+  src/pgsql_conn.cc 
+  src/instance_info.cc 
+  src/http_server.cc 
+  src/http_client.cc 
+  src/job.cc 
+  src/cjson.cc)
+configure_file(src/sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
-		"${PROJECT_BINARY_DIR}"
-		"${PROJECT_SOURCE_DIR}/vendor/include"
-		"${ZETTALIB_INCLUDE_PATH}")
-target_link_libraries(node_mgr server_http libzettalib.a libbrpc.a libprotobuf.a libgflags.a libleveldb.a mariadb pq pthread libssl.a libcrypto.a dl z)
+	"${PROJECT_BINARY_DIR}"
+  "${PROJECT_SOURCE_DIR}/src/vendor/include"
+  "${ZETTALIB_INCLUDE_PATH}")
+target_link_libraries(node_mgr 
+  server_http 
+  request_dealer
+  libzettalib.a 
+  libbrpc.a 
+  libprotobuf.a 
+  libgflags.a 
+  libleveldb.a 
+  libjsoncpp.a
+  mariadb 
+  pq 
+  pthread 
+  libssl.a 
+  libcrypto.a 
+  dl
+  z
+)
+set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output")
 
 install(TARGETS node_mgr DESTINATION bin)
-install(FILES ../README.md ../LICENSE ../NOTICE DESTINATION .)
+install(FILES 
+  resource/util/mydumper 
+  resource/util/myloader
+  PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+  DESTINATION bin/util)
+install(FILES 
+  resource/script/start_node_mgr.sh 
+  resource/script/stop_node_mgr.sh 
+  resource/script/restart_node_mgr.sh 
+  PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+  DESTINATION bin)
+install(FILES resource/node_mgr.cnf DESTINATION conf)
+install(DIRECTORY DESTINATION log)
+install(DIRECTORY DESTINATION data)
 
 MACRO(REPORT_CXX_FLAGS)
   MESSAGE(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")

@@ -27,6 +27,7 @@ extern int64_t mysql_max_packet_size;
 extern int64_t num_job_threads;
 extern int64_t num_http_threads;
 extern int64_t node_mgr_http_port;
+extern int64_t node_mgr_brpc_http_port;
 extern std::string http_web_path;
 extern std::string http_upload_path;
 extern std::string http_cmd_version;
@@ -39,6 +40,7 @@ extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
 
+extern std::string dev_interface;
 extern std::string meta_host;
 extern int64_t meta_port;
 extern std::string meta_user;
@@ -199,6 +201,8 @@ void Configs::define_configs()
 										"Number of http server threads to create.");
 	define_int_config("node_mgr_http_port", node_mgr_http_port, 1000, 65535, 5001,
 										"http server listen port.");
+	define_int_config("node_mgr_brpc_http_port", node_mgr_brpc_http_port, 1000, 65535, 5011,
+										"node_mgr brpc http server listen port.");
 
 	char def_log_path[64];
 	int slen = snprintf(def_log_path, sizeof(def_log_path),
@@ -230,6 +234,7 @@ void Configs::define_configs()
 	define_str_config("computer_prog_package_name", computer_prog_package_name, "postgresql-11.5-rel",
 										"computer_prog_package_name");
 
+  define_str_config("dev_interface",dev_interface,"eth0","Net Interface device name");
 	define_str_config("meta_host", meta_host, "127.0.0.1", "meta_host");
 	define_int_config("meta_port", meta_port, 1000, 65536, 6001, "meta_port");
 	define_str_config("meta_user", meta_user, "pgx", "meta_user");
