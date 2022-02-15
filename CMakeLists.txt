@@ -31,6 +31,7 @@ link_directories(${ZETTALIB_LIB_PATH})
 
 add_subdirectory(src/server_http)
 add_subdirectory(src/request_dealer)
+add_subdirectory(src/util)
 
 add_executable(node_mgr
   src/config.cc 
@@ -71,6 +72,7 @@ target_link_libraries(node_mgr
 set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output")
 
 install(TARGETS node_mgr DESTINATION bin)
+install(TARGETS delay_demo DESTINATION bin/util)
 install(FILES 
   resource/util/mydumper 
   resource/util/myloader
