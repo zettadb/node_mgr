@@ -14,7 +14,7 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
 
   // Sync Deal request here
-  syslog(Logger::ERROR, "get request: %s",
+  syslog(Logger::INFO, "get original request from cluster_mgr: %s",
          cntl->request_attachment().to_string().c_str());
 
 
@@ -23,6 +23,7 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
   RequestDealer dealer(cntl->request_attachment().to_string().c_str());
   if(!dealer.ParseRequest()){
     response_l = dealer.FetchResponse();
+    syslog(Logger::ERROR,"Parse Cluster mgr request failed: %s",dealer.getErr());
     goto end;
   }
 

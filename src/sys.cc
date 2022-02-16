@@ -22,7 +22,7 @@
 
 System *System::m_global_instance = NULL;
 extern std::string log_file_path;
-extern int64_t node_mgr_http_port;
+extern int64_t node_mgr_brpc_http_port;
 
 std::string meta_user;
 std::string meta_pwd;
@@ -146,7 +146,7 @@ bool System::regiest_to_meta() {
           "insert into kunlun_metadata_db.server_nodes "
           "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
           "total_mem=16384,svc_since=current_timestamp(6);",
-          local_ip.c_str(), node_mgr_http_port);
+          local_ip.c_str(), node_mgr_brpc_http_port);
   ret = mysql_conn.ExcuteQuery(sql, &result_set);
   if (ret <= 0) {
     syslog(Logger::ERROR,

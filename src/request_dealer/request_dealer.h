@@ -16,7 +16,7 @@
 class RequestDealer : public kunlun::ErrorCup {
 public:
   explicit RequestDealer(const char *request_json_cstr)
-      : request_json_str_(request_json_cstr) {}
+      : request_json_str_(request_json_cstr),popen_p_(nullptr) {}
   ~RequestDealer();
 
   bool ParseRequest();

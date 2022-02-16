@@ -71,6 +71,12 @@ node_mgr_http_port = 5010
 # node_mgr brpc http server port
 node_mgr_brpc_http_port = 5011
 
+# node_mgr util folder path
+node_mgr_util_path = ./util
+
+# node_mgr tmp data dir path
+node_mgr_tmp_data_path = ../data
+
 # http cmd version
 http_cmd_version = 0.9
 
