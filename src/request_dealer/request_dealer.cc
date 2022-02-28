@@ -27,17 +27,18 @@ bool RequestDealer::Deal() {
 
   syslog(Logger::INFO, "Will execute : %s", execute_command_.c_str());
   popen_p_ = new kunlun::BiodirectPopen(execute_command_.c_str());
-  bool ret = popen_p_->Launch("r");
+  bool ret = popen_p_->Launch("rw");
   if (!ret) {
     setErr("%s", popen_p_->getErr());
     return false;
   }
   FILE *stderr_fp = popen_p_->getReadStdErrFp();
-  char buffer[1024];
-  if (fgets(buffer, 1024, stderr_fp) == nullptr) {
-    return true;
+  char buffer[4096];
+  if (fgets(buffer, 4096, stderr_fp) != nullptr) {
+    syslog(Logger::ERROR,"Biopopen stderr: %s",buffer);
+    return false;
   }
-  return false;
+  return true;
 }
 
 bool RequestDealer::protocalValid() {
@@ -61,7 +62,16 @@ end:
   return ret;
 }
 
-std::string RequestDealer::FetchResponse() { return "{\"status\":\"ok\"}"; }
+std::string RequestDealer::FetchResponse() { 
+
+  Json::Value root;
+  root["task_spec_info"] = json_root_["task_spec_info"].asString();
+  root["status"] = "successful";
+
+  Json::FastWriter writer;
+
+  return writer.write(root);
+}
 
 void RequestDealer::constructCommand() {
   std::string command_name = json_root_["command_name"].asString();

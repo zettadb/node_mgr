@@ -76,6 +76,7 @@ install(TARGETS delay_demo DESTINATION bin/util)
 install(FILES 
   resource/util/mydumper 
   resource/util/myloader
+  resource/util/tablecatchup
   PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   DESTINATION bin/util)
 install(FILES 
