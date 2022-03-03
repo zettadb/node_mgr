@@ -77,8 +77,6 @@ public:
 	void set_auto_pullup(int seconds, int port);
 	bool get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip, int port, std::string &user, std::string &psw);
 	bool get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip, int port, std::string &user, std::string &psw);
-	bool pullup_mysql(int port);
-	bool pullup_pgsql(int port);
 	void keepalive_instance();
 
 	bool get_path_used(std::string &path, uint64_t &used);

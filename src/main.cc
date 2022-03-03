@@ -56,8 +56,8 @@ int main(int argc, char **argv)
 			break;
 		}
 
-		syslog(Logger::ERROR, "The time of node_mgr is different to cluster_mgr!");
-		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 1000);
+		syslog(Logger::ERROR, "check_timestamp error!");
+		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 3000);
 	}
 
 	while (!Thread_manager::do_exit)

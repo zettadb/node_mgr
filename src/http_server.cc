@@ -517,7 +517,7 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 	
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpJspOk, str_ret.length());
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n", lpHttpHtmlOk, str_ret.length());
 		send(socket, buf, n, 0);
 		send(socket, str_ret.c_str(), str_ret.length(), 0);
 	}
@@ -525,7 +525,7 @@ void Http_server::Http_server_handle_post_para(int &socket, char* buf, int len)
 	{
 		Job::get_instance()->add_job(para);
 
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpHtmlOk, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 }
@@ -683,7 +683,7 @@ end:
 	//syslog(Logger::INFO, "Http_server_handle_post_file ret=%d", ret);
 	if(ret)
 	{
-		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpJspOk, strlen(lpReturnOk), lpReturnOk);
+		int n = snprintf(buf, BUFSIZE, "%s%lu\r\n\r\n%s", lpHttpHtmlOk, strlen(lpReturnOk), lpReturnOk);
 		send(socket, buf, n, 0);
 	}
 	else

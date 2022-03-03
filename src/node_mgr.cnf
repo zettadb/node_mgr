@@ -68,3 +68,9 @@ storage_prog_package_name = kunlun-storage-0.9.1
 # computer_prog_package_name
 computer_prog_package_name = kunlun-server-0.9.1
 
+# prometheus path
+prometheus_path = ../../../program_binaries/prometheus
+
+# prometheus port start
+prometheus_port_start = 57010
+

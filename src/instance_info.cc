@@ -549,44 +549,6 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip, int
 	return true;
 }
 
-bool Instance_info::pullup_mysql(int port)
-{
-	std::string install_path = instance_binaries_path + "/storage/" + std::to_string(port) + "/" + 
-					storage_prog_package_name + "/dba_tools";
-	std::string cmd = "cd " + install_path + ";./startmysql.sh " + std::to_string(port);
-	syslog(Logger::INFO, "start mysql cmd : %s",cmd.c_str());
-	//system(cmd.c_str());
-	
-	FILE* pfd;
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
-	{
-		syslog(Logger::ERROR, "pullup_mysql error %s" ,cmd.c_str());
-		return false;
-	}
-	pclose(pfd);
-	return true;
-}
-
-bool Instance_info::pullup_pgsql(int port)
-{
-	std::string install_path = instance_binaries_path + "/computer/" + std::to_string(port) + "/" + 
-					computer_prog_package_name + "/scripts";
-	std::string cmd = "cd " + install_path + ";python2 start_pg.py port=" + std::to_string(port);
-	syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
-	//system(cmd.c_str());
-	
-	FILE* pfd;
-	pfd = popen(cmd.c_str(), "r");
-	if(!pfd)
-	{
-		syslog(Logger::ERROR, "pullup_pgsql error %s" ,cmd.c_str());
-		return false;
-	}
-	pclose(pfd);
-	return true;
-}
-
 void Instance_info::keepalive_instance()
 {
 	std::lock_guard<std::mutex> lock(mutex_instance_);
@@ -608,7 +570,7 @@ void Instance_info::keepalive_instance()
 		{
 			syslog(Logger::ERROR, "meta_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-			pullup_mysql(instance->port);
+			Job::get_instance()->job_control_storage(instance->port, 2);
 		}
 	}
 
@@ -628,7 +590,7 @@ void Instance_info::keepalive_instance()
 		{
 			syslog(Logger::ERROR, "storage_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-			pullup_mysql(instance->port);
+			Job::get_instance()->job_control_storage(instance->port, 2);
 		}
 	}
 
@@ -648,7 +610,7 @@ void Instance_info::keepalive_instance()
 		{
 			syslog(Logger::ERROR, "computer_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-			pullup_pgsql(instance->port);
+			Job::get_instance()->job_control_computer(instance->port, 2);
 		}
 	}
 }

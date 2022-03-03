@@ -46,6 +46,9 @@ std::string instance_binaries_path;
 std::string storage_prog_package_name;
 std::string computer_prog_package_name;
 
+std::string prometheus_path;
+int64_t prometheus_port_start;
+
 extern "C" void *thread_func_job_work(void*thrdarg);
 
 Job::Job()
@@ -397,6 +400,164 @@ bool Job::set_auto_pullup(cJSON *root, std::string &str_ret)
 	Instance_info::get_instance()->set_auto_pullup(minutes*60, port);
 
 	str_ret = "{\"result\":\"succeed\"}";
+	return true;
+}
+
+bool Job::check_port_idle(cJSON *root, std::string &str_ret)
+{
+	bool ret = false;
+	cJSON *item;
+
+	std::vector<int> vec_port;
+	for(int i=0; ; i++)
+	{
+		std::string name = "port" + std::to_string(i);
+		item = cJSON_GetObjectItem(root, name.c_str());
+		if(item == NULL)
+			break;
+
+		vec_port.emplace_back(item->valueint);
+	}
+
+	ret = check_port_idle(vec_port);
+
+	cJSON *ret_root;
+	char *ret_cjson;
+
+	ret_root = cJSON_CreateObject();
+	if(ret)
+		cJSON_AddStringToObject(ret_root, "result", "succeed");
+	else
+		cJSON_AddStringToObject(ret_root, "result", "error");
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
+	return true;
+}
+
+bool Job::check_port_idle(std::vector<int> &vec_port)
+{
+	bool ret = true;
+	FILE* pfd = NULL;
+	char buf[256];
+	std::string str_cmd;
+	std::string str_port;
+
+	for(auto &port: vec_port)
+	{
+		str_port = std::to_string(port);
+		str_cmd = "netstat -anp | grep " + str_port;
+		syslog(Logger::INFO, "check_port_idle str_cmd : %s",str_cmd.c_str());
+
+		pfd = popen(str_cmd.c_str(), "r");
+		if(!pfd)
+			continue;
+
+		while(fgets(buf, 256, pfd))
+		{
+			syslog(Logger::INFO, "check_port_idle %s",buf);
+			if(strstr(buf, str_port.c_str()))
+			{
+				ret = false;
+				break;
+			}
+		}
+			
+		pclose(pfd);
+		pfd = NULL;
+
+		if(!ret)
+			break;
+	}
+
+	return ret;
+}
+
+bool Job::start_node_exporter(cJSON *root, std::string &str_ret)
+{
+	bool ret = false;
+
+	cJSON *ret_root;
+	char *ret_cjson;
+
+	FILE* pfd;
+	char buf[256];
+
+	std::string cmd, process_id;
+
+	/////////////////////////////////////////////////////////
+	// get process_id of node_exporter
+	cmd = "netstat -tnpl | grep tcp6 | grep " + std::to_string(prometheus_port_start+1);
+	syslog(Logger::INFO, "start_node_exporter cmd %s", cmd.c_str());
+
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd)
+	{
+		syslog(Logger::ERROR, "get error %s", cmd.c_str());
+		goto end;
+	}
+	if(fgets(buf, 256, pfd)!=NULL)
+	{
+		char *p, *q;
+		p = strstr(buf, "LISTEN");
+		if(p != NULL)
+		{
+			p = strchr(p, 0x20);
+			if(p != NULL)
+			{
+				while(*p == 0x20)
+					p++;
+
+				q = strchr(p, '/');
+
+				if(p != NULL)
+					process_id = std::string(p, q - p);
+			}
+		}
+	}
+	pclose(pfd);
+
+	/////////////////////////////////////////////////////////
+	// start prometheus
+	if(process_id.length() == 0)
+	{
+		cmd = "cd " + prometheus_path + "/node_exporter;";
+		cmd += "./node_exporter --web.listen-address=:" + std::to_string(prometheus_port_start+1) + " &";
+		syslog(Logger::INFO, "job_restart_prometheus cmd %s", cmd.c_str());
+
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd)
+		{
+			syslog(Logger::ERROR, "start error %s", cmd.c_str());
+			goto end;
+		}
+		pclose(pfd);
+	}
+
+	ret = true;
+
+end:
+	/////////////////////////////////////////////////////////
+	ret_root = cJSON_CreateObject();
+	if(ret)
+		cJSON_AddStringToObject(ret_root, "result", "succeed");
+	else
+		cJSON_AddStringToObject(ret_root, "result", "error");
+
+	ret_cjson = cJSON_Print(ret_root);
+	str_ret = ret_cjson;
+
+	if(ret_root != NULL)
+		cJSON_Delete(ret_root);
+	if(ret_cjson != NULL)
+		free(ret_cjson);
+
 	return true;
 }
 
@@ -1682,6 +1843,38 @@ bool Job::job_read_file(std::string &path, std::string &str)
 	return true;
 }
 
+bool Job::job_create_program_path()
+{
+	std::string cmd, cmd_path, program_path;
+
+	//upzip to program_binaries_path for install cmd
+	//storage
+	cmd_path = program_binaries_path + "/" + storage_prog_package_name + "/dba_tools";
+	if(access(cmd_path.c_str(), F_OK) != 0)
+	{
+		syslog(Logger::INFO, "upzip %s.tgz" , storage_prog_package_name.c_str());
+		program_path = program_binaries_path + "/" + storage_prog_package_name + ".tgz";
+
+		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
+		if(!job_system_cmd(cmd))
+			return false;
+	}
+
+	//computer
+	cmd_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts";
+	if(access(cmd_path.c_str(), F_OK) != 0)
+	{
+		syslog(Logger::INFO, "upzip %s.tgz" , computer_prog_package_name.c_str());
+		program_path = program_binaries_path + "/" + computer_prog_package_name + ".tgz";
+
+		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
+		if(!job_system_cmd(cmd))
+			return false;
+	}
+
+	return true;
+}
+
 bool Job::job_control_storage(int port, int control)
 {
 	bool ret = false;
@@ -1882,7 +2075,7 @@ bool Job::job_control_computer(int port, int control)
 	else if(control == 2)
 	{
 		// start
-		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts; python2 start_pg.py port=" + std::to_string(port);
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts; python2 start_pg.py --port=" + std::to_string(port);
 		syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
 		
 		pfd = popen(cmd.c_str(), "r");
@@ -1917,7 +2110,7 @@ bool Job::job_control_computer(int port, int control)
 		sleep(1);
 
 		// start
-		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts; python2 start_pg.py port=" + std::to_string(port);
+		cmd = "cd " + instance_path + "/" + computer_prog_package_name + "/scripts; python2 start_pg.py --port=" + std::to_string(port);
 		syslog(Logger::INFO, "start pgsql cmd : %s",cmd.c_str());
 		
 		pfd = popen(cmd.c_str(), "r");
@@ -1936,6 +2129,36 @@ end:
 		cJSON_Delete(root_file);
 
 	return ret;
+}
+
+bool Job::job_storage_add_lib(std::set<std::string> &set_lib)
+{
+	std::string cmd, program_path;
+
+	program_path = program_binaries_path + "/" + storage_prog_package_name + "/lib";
+
+	for(auto &lib: set_lib)
+	{
+		cmd = "cd program_path;cp deps/" + lib + " .";
+		job_system_cmd(cmd);
+	}
+
+	return true;
+}
+
+bool Job::job_computer_add_lib(std::set<std::string> &set_lib)
+{
+	std::string cmd, program_path;
+
+	program_path = program_binaries_path + "/" + computer_prog_package_name + "/lib";
+
+	for(auto &lib: set_lib)
+	{
+		cmd = "cd program_path;cp deps/" + lib + " .";
+		job_system_cmd(cmd);
+	}
+
+	return true;
 }
 
 void Job::job_control_instance(cJSON *root)
@@ -2067,12 +2290,13 @@ void Job::job_install_storage(cJSON *root)
 	FILE* pfd;
 	char buf[256];
 
-	int retry;
+	int retry=9;
 	int install_id;
 	int port;
 	std::string cluster_name,shard_name,ha_mode,ip,user,pwd;
 	std::string cmd, program_path, instance_path, jsonfile_path;
 	MYSQL_CONN mysql_conn;
+	std::set<std::string> set_lib;
 	
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL || item->valuestring == NULL)
@@ -2155,6 +2379,14 @@ void Job::job_install_storage(cJSON *root)
 		goto end;
 	}
 
+	/////////////////////////////////////////////////////////
+	// for install cluster
+	if(!job_create_program_path())
+	{
+		job_info = "create_cmd_path error";
+		goto end;
+	}
+
 	/////////////////////////////////////////////////////////////
 	//upzip from program_binaries_path to instance_binaries_path
 	program_path = program_binaries_path + "/" + storage_prog_package_name + ".tgz";
@@ -2174,6 +2406,7 @@ void Job::job_install_storage(cJSON *root)
 		goto end;
 	}
 
+start:
 	//////////////////////////////
 	//rm file in instance_path
 	cmd = "rm -rf " + instance_path + "/*";
@@ -2263,10 +2496,35 @@ void Job::job_install_storage(cJSON *root)
 	}
 	while(fgets(buf, 256, pfd)!=NULL)
 	{
+		char *p,*q;
 		//if(strcasestr(buf, "error") != NULL)
 			syslog(Logger::INFO, "%s", buf);
+
+		p = strstr(buf, "error while loading shared libraries");
+		if(p == NULL)
+			continue;
+
+		p = strstr(p, ":");
+		if(p == NULL)
+			continue;
+
+		p++;
+		while(*p == 0x20)
+			p++;
+
+		q = strstr(p, ":");
+		if(q == NULL)
+			continue;
+
+		set_lib.insert(std::string(p, q-p));
 	}
 	pclose(pfd);
+
+	if(set_lib.size()>0 && retry-->0 && !Job::do_exit)
+	{
+		job_storage_add_lib(set_lib);
+		goto start;
+	}
 
 	/////////////////////////////////////////////////////////////
 	// check instance succeed by connect to instance
@@ -2313,12 +2571,13 @@ void Job::job_install_computer(cJSON *root)
 	FILE* pfd;
 	char buf[256];
 
-	int retry;
+	int retry=9;
 	int install_id;
 	int port;
 	std::string ip,user,pwd;
 	std::string cmd, program_path, instance_path, jsonfile_path;
 	PGSQL_CONN pgsql_conn;
+	std::set<std::string> set_lib;
 	
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL || item->valuestring == NULL)
@@ -2401,6 +2660,14 @@ void Job::job_install_computer(cJSON *root)
 		goto end;
 	}
 
+	/////////////////////////////////////////////////////////
+	// for install cluster
+	if(!job_create_program_path())
+	{
+		job_info = "create_cmd_path error";
+		goto end;
+	}
+
 	/////////////////////////////////////////////////////////////
 	//upzip from program_binaries_path to instance_binaries_path
 	program_path = program_binaries_path + "/" + computer_prog_package_name + ".tgz";
@@ -2420,6 +2687,7 @@ void Job::job_install_computer(cJSON *root)
 		goto end;
 	}
 
+start:
 	//////////////////////////////
 	//rm file in instance_path
 	cmd = "rm -rf " + instance_path + "/*";
@@ -2478,10 +2746,35 @@ void Job::job_install_computer(cJSON *root)
 	}
 	while(fgets(buf, 256, pfd)!=NULL)
 	{
+		char *p,*q;
 		//if(strcasestr(buf, "error") != NULL)
 			syslog(Logger::INFO, "%s", buf);
+	
+		p = strstr(buf, "error while loading shared libraries");
+		if(p == NULL)
+			continue;
+
+		p = strstr(p, ":");
+		if(p == NULL)
+			continue;
+
+		p++;
+		while(*p == 0x20)
+			p++;
+
+		q = strstr(p, ":");
+		if(q == NULL)
+			continue;
+
+		set_lib.insert(std::string(p, q-p));
 	}
 	pclose(pfd);
+
+	if(set_lib.size()>0 && retry-->0 && !Job::do_exit)
+	{
+		job_computer_add_lib(set_lib);
+		goto start;
+	}
 
 	/////////////////////////////////////////////////////////////
 	// check instance succeed by connect to instance
@@ -2912,9 +3205,9 @@ void Job::job_backup_shard(cJSON *root)
 	FILE* pfd;
 	char buf[512];
 
-	std::string cmd, cluster_name,shard_name;
-	int port,hdfs_port;
-	std::string ip,hdfs_ip;
+	std::string cmd, cluster_name,shard_name,backup_storage;
+	int port;
+	std::string ip;
 	
 	item = cJSON_GetObjectItem(root, "job_id");
 	if(item == NULL || item->valuestring == NULL)
@@ -2967,21 +3260,13 @@ void Job::job_backup_shard(cJSON *root)
 	}
 	shard_name = item->valuestring;
 
-	item = cJSON_GetObjectItem(root, "hdfs_ip");
+	item = cJSON_GetObjectItem(root, "backup_storage");
 	if(item == NULL || item->valuestring == NULL)
 	{
-		job_info = "get hdfs_ip error";
+		job_info = "get backup_storage error";
 		goto end;
 	}
-	hdfs_ip = item->valuestring;
-	
-	item = cJSON_GetObjectItem(root, "hdfs_port");
-	if(item == NULL)
-	{
-		job_info = "get hdfs_port error";
-		goto end;
-	}
-	hdfs_port = item->valueint;
+	backup_storage = item->valuestring;
 
 	job_info = "backup shard wroking";
 	update_jobid_status(job_id, job_result, job_info);
@@ -2990,7 +3275,7 @@ void Job::job_backup_shard(cJSON *root)
 	////////////////////////////////////////////////////////
 	//start backup path
 	cmd = "backup -backuptype=storage -port=" + std::to_string(port) + " -clustername=" + cluster_name + " -shardname=" + shard_name;
-	cmd += " -HdfsNameNodeService=hdfs://" + hdfs_ip + ":" + std::to_string(hdfs_port);
+	cmd += " -HdfsNameNodeService=" + backup_storage;
 	syslog(Logger::INFO, "job_backup_shard cmd %s", cmd.c_str());
 	
 	pfd = popen(cmd.c_str(), "r");
@@ -3023,6 +3308,8 @@ void Job::job_backup_shard(cJSON *root)
 			job_info = "backup cmd return error";
 			goto end;
 		}
+
+		job_info = buf;
 	}
 
 	////////////////////////////////////////////////////////
@@ -3035,7 +3322,7 @@ void Job::job_backup_shard(cJSON *root)
 	}
 
 	job_result = "succeed";
-	job_info = "backup succeed";
+	//job_info = "backup succeed"; //for shard_backup_path
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 	return;
@@ -3056,10 +3343,10 @@ void Job::job_restore_storage(cJSON *root)
 	FILE* pfd;
 	char buf[512];
 
-	std::string cmd, cluster_name, shard_name, timestamp;
-	std::string ip,hdfs_ip,user,pwd;
+	std::string cmd, cluster_name, shard_name, timestamp, backup_storage;
+	std::string ip,user,pwd;
 	MYSQL_CONN mysql_conn;
-	int port,hdfs_port;
+	int port;
 	int retry;
 	
 	item = cJSON_GetObjectItem(root, "job_id");
@@ -3122,21 +3409,13 @@ void Job::job_restore_storage(cJSON *root)
 	}
 	timestamp = item->valuestring;
 
-	item = cJSON_GetObjectItem(root, "hdfs_ip");
+	item = cJSON_GetObjectItem(root, "backup_storage");
 	if(item == NULL || item->valuestring == NULL)
 	{
-		job_info = "get hdfs_ip error";
+		job_info = "get backup_storage error";
 		goto end;
 	}
-	hdfs_ip = item->valuestring;
-	
-	item = cJSON_GetObjectItem(root, "hdfs_port");
-	if(item == NULL)
-	{
-		job_info = "get hdfs_port error";
-		goto end;
-	}
-	hdfs_port = item->valueint;
+	backup_storage = item->valuestring;
 
 	job_info = "restore storage wroking";
 	update_jobid_status(job_id, job_result, job_info);
@@ -3145,7 +3424,7 @@ void Job::job_restore_storage(cJSON *root)
 	////////////////////////////////////////////////////////
 	//start backup path
 	cmd = "restore -port=" + std::to_string(port) + " -origclustername=" + cluster_name + " -origshardname=" + shard_name;
-	cmd += " -restoretime='" + timestamp + "' -HdfsNameNodeService=hdfs://" + hdfs_ip + ":" + std::to_string(hdfs_port);
+	cmd += " -restoretime='" + timestamp + "' -HdfsNameNodeService=" + backup_storage;
 	syslog(Logger::INFO, "job_restore_storage cmd %s", cmd.c_str());
 	
 	pfd = popen(cmd.c_str(), "r");
@@ -3422,6 +3701,10 @@ bool Job::get_job_type(char *str, Job_type &job_type)
 		job_type = JOB_GET_PATH_SPACE;
 	else if(strcmp(str, "auto_pullup")==0)
 		job_type = JOB_AUTO_PULLUP;
+	else if(strcmp(str, "check_port")==0)
+		job_type = JOB_CHECK_PORT;
+	else if(strcmp(str, "node_exporter")==0)
+		job_type = JOB_NODE_EXPORTER;
 	else if(strcmp(str, "control_instance")==0)
 		job_type = JOB_CONTROL_INSTANCE;
 	else if(strcmp(str, "install_storage")==0)
@@ -3503,6 +3786,14 @@ bool Job::job_handle_ahead(const std::string &para, std::string &str_ret)
 	else if(job_type == JOB_AUTO_PULLUP)
 	{
 		ret = set_auto_pullup(root, str_ret);
+	}
+	else if(job_type == JOB_CHECK_PORT)
+	{
+		ret = check_port_idle(root, str_ret);
+	}
+	else if(job_type == JOB_NODE_EXPORTER)
+	{
+		ret = start_node_exporter(root, str_ret);
 	}
 	else
 		ret = false;

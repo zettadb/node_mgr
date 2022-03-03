@@ -36,6 +36,8 @@ JOB_GET_PATH_SPACE,
 JOB_UPDATE_INSTANCES,
 JOB_AUTO_PULLUP,
 JOB_MACHINE_PATH, 
+JOB_CHECK_PORT, 
+JOB_NODE_EXPORTER, 
 JOB_CONTROL_INSTANCE, 
 JOB_INSTALL_STORAGE, 
 JOB_INSTALL_COMPUTER,
@@ -88,6 +90,9 @@ public:
 	bool get_node_instance(cJSON *root, std::string &str_ret);
 	bool get_node_info(cJSON *root, std::string &str_ret);
 	bool set_auto_pullup(cJSON *root, std::string &str_ret);
+	bool check_port_idle(cJSON *root, std::string &str_ret);
+	bool check_port_idle(std::vector<int> &vec_port);
+	bool start_node_exporter(cJSON *root, std::string &str_ret);
 	bool get_disk_size(cJSON *root, std::string &str_ret);
 	bool get_path_space(cJSON *root, std::string &str_ret);
 	bool get_path_size(std::string &path, std::string &used, std::string &free);
@@ -125,8 +130,11 @@ public:
 	bool job_system_cmd(std::string &cmd);
 	bool job_save_file(std::string &path, char* buf);
 	bool job_read_file(std::string &path, std::string &str);
+	bool job_create_program_path();
 	bool job_control_storage(int port, int control);
 	bool job_control_computer(int port, int control);
+	bool job_storage_add_lib(std::set<std::string> &set_lib);
+	bool job_computer_add_lib(std::set<std::string> &set_lib);
 
 	void job_control_instance(cJSON *root);
 	void job_install_storage(cJSON *root);

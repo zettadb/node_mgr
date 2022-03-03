@@ -39,6 +39,9 @@ extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
 
+extern std::string prometheus_path;
+extern int64_t prometheus_port_start;
+
 Configs *Configs::get_instance()
 {
 	if (m_inst == NULL)
@@ -226,6 +229,10 @@ void Configs::define_configs()
 	define_str_config("computer_prog_package_name", computer_prog_package_name, "postgresql-11.5-rel",
 		"computer_prog_package_name");
 
+	define_str_config("prometheus_path", prometheus_path, "../../../program_binaries/prometheus",
+		"prometheus_path");
+	define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535, 57010,
+		"prometheus_port_start");
 
 	/*
 	  There is no practical way we can prevent multiple cluster_mgr processes
