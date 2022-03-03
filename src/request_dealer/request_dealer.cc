@@ -29,15 +29,20 @@ bool RequestDealer::Deal() {
   popen_p_ = new kunlun::BiodirectPopen(execute_command_.c_str());
   bool ret = popen_p_->Launch("rw");
   if (!ret) {
-    setErr("%s", popen_p_->getErr());
+    setErr("child return code: %d, %s", popen_p_->get_chiled_status(),
+           popen_p_->getErr());
+    
     return false;
   }
   FILE *stderr_fp = popen_p_->getReadStdErrFp();
-  char buffer[4096];
-  if (fgets(buffer, 4096, stderr_fp) != nullptr) {
-    syslog(Logger::ERROR,"Biopopen stderr: %s",buffer);
+  char buffer[8192];
+  if (fgets(buffer, 8192, stderr_fp) != nullptr) {
+    setErr("stderr: %s, return code: %d", buffer,
+           popen_p_->get_chiled_status());
+    syslog(Logger::ERROR, "Biopopen stderr: %s", buffer);
     return false;
   }
+  deal_success_ = true;
   return true;
 }
 
@@ -62,13 +67,27 @@ end:
   return ret;
 }
 
-std::string RequestDealer::FetchResponse() { 
+std::string RequestDealer::getStatusStr() {
+  return deal_success_ ? "success" : "failed";
+}
+
+std::string RequestDealer::getInfo(){
+  if (!deal_success_){
+    return getErr();
+  }
+  return "success";
+}
+
+std::string RequestDealer::FetchResponse() {
 
   Json::Value root;
+  root["cluster_mgr_request_id"] = json_root_["cluster_mgr_request_id"].asString();
   root["task_spec_info"] = json_root_["task_spec_info"].asString();
-  root["status"] = "successful";
+  root["status"] = getStatusStr();
+  root["info"] = getInfo();
 
   Json::FastWriter writer;
+  writer.omitEndingLineFeed();
 
   return writer.write(root);
 }

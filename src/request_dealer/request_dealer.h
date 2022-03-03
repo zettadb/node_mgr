@@ -8,15 +8,16 @@
 #ifndef _NODE_MANAGER_REQUEST_DEALER_H_
 #define _NODE_MANAGER_REQUEST_DEALER_H_
 
-#include "zettalib/errorcup.h"
 #include "zettalib/biodirectpopen.h"
+#include "zettalib/errorcup.h"
 #include "json/json.h"
 #include <string>
 
 class RequestDealer : public kunlun::ErrorCup {
 public:
   explicit RequestDealer(const char *request_json_cstr)
-      : request_json_str_(request_json_cstr),popen_p_(nullptr) {}
+      : request_json_str_(request_json_cstr), popen_p_(nullptr),
+        deal_success_(false) {}
   ~RequestDealer();
 
   bool ParseRequest();
@@ -26,7 +27,8 @@ public:
 private:
   bool protocalValid();
   void constructCommand();
-  
+  std::string getStatusStr();
+  std::string getInfo();
 
 private:
   // forbid copy
@@ -38,6 +40,7 @@ private:
   Json::Value json_root_;
   std::string execute_command_;
   kunlun::BiodirectPopen *popen_p_;
+  bool deal_success_;
 };
 
 #endif /*_NODE_MANAGER_REQUEST_DEALER_H_*/

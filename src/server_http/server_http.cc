@@ -13,6 +13,7 @@ void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
   brpc::ClosureGuard done_gurad(done);
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
 
+
   // Sync Deal request here
   syslog(Logger::INFO, "get original request from cluster_mgr: %s",
          cntl->request_attachment().to_string().c_str());
