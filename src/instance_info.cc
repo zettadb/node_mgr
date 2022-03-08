@@ -123,7 +123,9 @@ int Instance_info::get_meta_instance()
 	cJSON *item;
 	cJSON *sub_item;
 	char *cjson;
-	
+	int retry = 3;
+	cJSON *ret_root;
+
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "job_type", "get_instance");
 	cJSON_AddStringToObject(root, "instance_type", "meta_instance");
@@ -140,67 +142,71 @@ int Instance_info::get_meta_instance()
 	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
 	
 	std::string result_str;
-	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
-	free(cjson);
-	
-	if(ret == 0)
+	while(retry-->0 && !Job::do_exit)
 	{
-		//syslog(Logger::INFO, "result_str meta=%s", result_str.c_str());
-		cJSON *ret_root;
-		cJSON *ret_item;
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
+			break;
+	}
+	free(cjson);
 
-		ret_root = cJSON_Parse(result_str.c_str());
-		if(ret_root == NULL)
-			return 1;
+	if(retry<0)
+	{
+		syslog(Logger::ERROR, "get_meta_instance fail because http post");
+		return 0;
+	}
+	
+	//syslog(Logger::INFO, "result_str meta=%s", result_str.c_str());
+	ret_root = cJSON_Parse(result_str.c_str());
+	if(ret_root == NULL)
+		return 0;
 
-		for (auto &instance:vec_meta_instance)
-			delete instance;
-		vec_meta_instance.clear();
+	for (auto &instance:vec_meta_instance)
+		delete instance;
+	vec_meta_instance.clear();
 
-		int node_count = 0;
-		while(true)
-		{
-			std::string node_str = "meta_instance" + std::to_string(node_count++);
-			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
-			if(item == NULL)
-				break;
-			
-			std::string ip;
-			int port;
-			std::string user;
-			std::string pwd;
+	int node_count = 0;
+	while(true)
+	{
+		std::string node_str = "meta_instance" + std::to_string(node_count++);
+		item = cJSON_GetObjectItem(ret_root, node_str.c_str());
+		if(item == NULL)
+			break;
+		
+		std::string ip;
+		int port;
+		std::string user;
+		std::string pwd;
 
-			sub_item = cJSON_GetObjectItem(item, "ip");
-			if(sub_item == NULL)
-				break;
-			ip = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "ip");
+		if(sub_item == NULL)
+			break;
+		ip = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "port");
-			if(sub_item == NULL)
-				break;
-			port = sub_item->valueint;
+		sub_item = cJSON_GetObjectItem(item, "port");
+		if(sub_item == NULL)
+			break;
+		port = sub_item->valueint;
 
-			sub_item = cJSON_GetObjectItem(item, "user");
-			if(sub_item == NULL)
-				break;
-			user = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "user");
+		if(sub_item == NULL)
+			break;
+		user = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "pwd");
-			if(sub_item == NULL)
-				break;
-			pwd = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "pwd");
+		if(sub_item == NULL)
+			break;
+		pwd = sub_item->valuestring;
 
-			Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
-			vec_meta_instance.emplace_back(instance);
+		Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
+		vec_meta_instance.emplace_back(instance);
 
-			MYSQL_CONN *conn = new MYSQL_CONN();
-			instance->mysql_conn = conn;
-		}
+		MYSQL_CONN *conn = new MYSQL_CONN();
+		instance->mysql_conn = conn;
 	}
 
 	syslog(Logger::INFO, "meta instance %d update", vec_meta_instance.size());
 
-	return ret;
+	return 1;
 }
 
 int Instance_info::get_storage_instance()
@@ -211,7 +217,9 @@ int Instance_info::get_storage_instance()
 	cJSON *item;
 	cJSON *sub_item;
 	char *cjson;
-	
+	int retry = 3;
+	cJSON *ret_root;
+
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "job_type", "get_instance");
 	cJSON_AddStringToObject(root, "instance_type", "storage_instance");
@@ -228,77 +236,81 @@ int Instance_info::get_storage_instance()
 	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
 	
 	std::string result_str;
-	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
+	while(retry-->0 && !Job::do_exit)
+	{
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
+			break;
+	}
 	free(cjson);
 	
-	if(ret == 0)
+	if(retry<0)
 	{
-		//syslog(Logger::INFO, "result_str storage=%s", result_str.c_str());
-		cJSON *ret_root;
-		cJSON *ret_item;
+		syslog(Logger::ERROR, "get_storage_instance fail because http post");
+		return 0;
+	}
 
-		ret_root = cJSON_Parse(result_str.c_str());
-		if(ret_root == NULL)
-			return 1;
+	//syslog(Logger::INFO, "result_str storage=%s", result_str.c_str());
+	ret_root = cJSON_Parse(result_str.c_str());
+	if(ret_root == NULL)
+		return 0;
 
-		for (auto &instance:vec_storage_instance)
-			delete instance;
-		vec_storage_instance.clear();
+	for (auto &instance:vec_storage_instance)
+		delete instance;
+	vec_storage_instance.clear();
 
-		int node_count = 0;
-		while(true)
-		{
-			std::string node_str = "storage_instance" + std::to_string(node_count++);
-			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
-			if(item == NULL)
-				break;
-		
-			std::string ip;
-			int port;
-			std::string user;
-			std::string pwd;
+	int node_count = 0;
+	while(true)
+	{
+		std::string node_str = "storage_instance" + std::to_string(node_count++);
+		item = cJSON_GetObjectItem(ret_root, node_str.c_str());
+		if(item == NULL)
+			break;
+	
+		std::string ip;
+		int port;
+		std::string user;
+		std::string pwd;
 
-			sub_item = cJSON_GetObjectItem(item, "ip");
-			if(sub_item == NULL)
-				break;
-			ip = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "ip");
+		if(sub_item == NULL)
+			break;
+		ip = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "port");
-			if(sub_item == NULL)
-				break;
-			port = sub_item->valueint;
+		sub_item = cJSON_GetObjectItem(item, "port");
+		if(sub_item == NULL)
+			break;
+		port = sub_item->valueint;
 
-			sub_item = cJSON_GetObjectItem(item, "user");
-			if(sub_item == NULL)
-				break;
-			user = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "user");
+		if(sub_item == NULL)
+			break;
+		user = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "pwd");
-			if(sub_item == NULL)
-				break;
-			pwd = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "pwd");
+		if(sub_item == NULL)
+			break;
+		pwd = sub_item->valuestring;
 
-			Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
-			vec_storage_instance.emplace_back(instance);
+		Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
+		vec_storage_instance.emplace_back(instance);
 
-			sub_item = cJSON_GetObjectItem(item, "cluster");
-			if(sub_item == NULL)
-				break;
-			instance->cluster = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "cluster");
+		if(sub_item == NULL)
+			break;
+		instance->cluster = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "shard");
-			if(sub_item == NULL)
-				break;
-			instance->shard = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "shard");
+		if(sub_item == NULL)
+			break;
+		instance->shard = sub_item->valuestring;
 
-			MYSQL_CONN *conn = new MYSQL_CONN();
-			instance->mysql_conn = conn;
-		}
+		MYSQL_CONN *conn = new MYSQL_CONN();
+		instance->mysql_conn = conn;
 	}
 
 	syslog(Logger::INFO, "storage instance %d update", vec_storage_instance.size());
 
-	return ret;
+	return 1;
 }
 
 int Instance_info::get_computer_instance()
@@ -309,7 +321,9 @@ int Instance_info::get_computer_instance()
 	cJSON *item;
 	cJSON *sub_item;
 	char *cjson;
-	
+	int retry = 3;
+	cJSON *ret_root;
+
 	root = cJSON_CreateObject();
 	cJSON_AddStringToObject(root, "job_type", "get_instance");
 	cJSON_AddStringToObject(root, "instance_type", "computer_instance");
@@ -326,77 +340,81 @@ int Instance_info::get_computer_instance()
 	std::string post_url = "http://" + cluster_mgr_http_ip + ":" + std::to_string(cluster_mgr_http_port);
 	
 	std::string result_str;
-	int ret = Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str);
+	while(retry-->0 && !Job::do_exit)
+	{
+		if(Http_client::get_instance()->Http_client_post_para(post_url.c_str(), cjson, result_str)==0)
+			break;
+	}
 	free(cjson);
 	
-	if(ret == 0)
+	if(retry<0)
 	{
-		//syslog(Logger::INFO, "result_str computer=%s", result_str.c_str());
-		cJSON *ret_root;
-		cJSON *ret_item;
+		syslog(Logger::ERROR, "get_computer_instance fail because http post");
+		return 0;
+	}
 
-		ret_root = cJSON_Parse(result_str.c_str());
-		if(ret_root == NULL)
-			return 1;
+	//syslog(Logger::INFO, "result_str computer=%s", result_str.c_str());
+	ret_root = cJSON_Parse(result_str.c_str());
+	if(ret_root == NULL)
+		return 0;
 
-		for (auto &instance:vec_computer_instance)
-			delete instance;
-		vec_computer_instance.clear();
+	for (auto &instance:vec_computer_instance)
+		delete instance;
+	vec_computer_instance.clear();
 
-		int node_count = 0;
-		while(true)
-		{
-			std::string node_str = "computer_instance" + std::to_string(node_count++);
-			item = cJSON_GetObjectItem(ret_root, node_str.c_str());
-			if(item == NULL)
-				break;
-		
-			std::string ip;
-			int port;
-			std::string user;
-			std::string pwd;
+	int node_count = 0;
+	while(true)
+	{
+		std::string node_str = "computer_instance" + std::to_string(node_count++);
+		item = cJSON_GetObjectItem(ret_root, node_str.c_str());
+		if(item == NULL)
+			break;
+	
+		std::string ip;
+		int port;
+		std::string user;
+		std::string pwd;
 
-			sub_item = cJSON_GetObjectItem(item, "ip");
-			if(sub_item == NULL)
-				break;
-			ip = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "ip");
+		if(sub_item == NULL)
+			break;
+		ip = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "port");
-			if(sub_item == NULL)
-				break;
-			port = sub_item->valueint;
+		sub_item = cJSON_GetObjectItem(item, "port");
+		if(sub_item == NULL)
+			break;
+		port = sub_item->valueint;
 
-			sub_item = cJSON_GetObjectItem(item, "user");
-			if(sub_item == NULL)
-				break;
-			user = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "user");
+		if(sub_item == NULL)
+			break;
+		user = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "pwd");
-			if(sub_item == NULL)
-				break;
-			pwd = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "pwd");
+		if(sub_item == NULL)
+			break;
+		pwd = sub_item->valuestring;
 
-			Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
-			vec_computer_instance.emplace_back(instance);
+		Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
+		vec_computer_instance.emplace_back(instance);
 
-			sub_item = cJSON_GetObjectItem(item, "cluster");
-			if(sub_item == NULL)
-				break;
-			instance->cluster = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "cluster");
+		if(sub_item == NULL)
+			break;
+		instance->cluster = sub_item->valuestring;
 
-			sub_item = cJSON_GetObjectItem(item, "comp");
-			if(sub_item == NULL)
-				break;
-			instance->comp = sub_item->valuestring;
+		sub_item = cJSON_GetObjectItem(item, "comp");
+		if(sub_item == NULL)
+			break;
+		instance->comp = sub_item->valuestring;
 
-			PGSQL_CONN *conn = new PGSQL_CONN();
-			instance->pgsql_conn = conn;
-		}
+		PGSQL_CONN *conn = new PGSQL_CONN();
+		instance->pgsql_conn = conn;
 	}
 
 	syslog(Logger::INFO, "computer instance %d update", vec_computer_instance.size());
 
-	return ret;
+	return 1;
 }
 
 void Instance_info::remove_storage_instance(std::string &ip, int port)
