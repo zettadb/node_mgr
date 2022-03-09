@@ -73,6 +73,7 @@ set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output")
 
 install(TARGETS node_mgr DESTINATION bin)
 install(TARGETS delay_demo DESTINATION bin/util)
+install(TARGETS download_file DESTINATION bin/util)
 install(FILES 
   resource/util/mydumper 
   resource/util/myloader

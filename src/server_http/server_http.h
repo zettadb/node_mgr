@@ -12,20 +12,29 @@
 #include "zettalib/errorcup.h"
 
 using namespace kunlunrpc;
-class HttpServiceImpl : public kunlunrpc::HttpService,
-                        public kunlun::ErrorCup {
+class HttpServiceImpl : public kunlunrpc::HttpService, public kunlun::ErrorCup {
 public:
   HttpServiceImpl(){};
   virtual ~HttpServiceImpl(){};
 
   void Emit(google::protobuf::RpcController *, const HttpRequest *,
-              HttpResponse *, google::protobuf::Closure *);
+            HttpResponse *, google::protobuf::Closure *);
 
   bool ParseBodyToJsonDoc(const std::string &, rapidjson::Document *);
 
 private:
 };
 
-extern brpc::Server *NewHttpServer();
+class FileServiceImpl : public kunlunrpc::FileService, public kunlun::ErrorCup {
+public:
+  FileServiceImpl(){};
+  virtual ~FileServiceImpl(){};
+  void default_method(google::protobuf::RpcController *, const HttpRequest *,
+                      HttpResponse *, google::protobuf::Closure *);
+private:
+};
+
+extern brpc::Server *
+NewHttpServer();
 
 #endif /*_NODE_MGR_HTTP_SERVER_H_*/

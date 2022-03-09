@@ -23,6 +23,7 @@
 System *System::m_global_instance = NULL;
 extern std::string log_file_path;
 extern int64_t node_mgr_brpc_http_port;
+extern std::string node_mgr_tmp_data_path;
 
 std::string meta_user;
 std::string meta_pwd;
@@ -142,11 +143,13 @@ bool System::regiest_to_meta() {
     }
   }
   bzero(sql, sizeof(sql) / sizeof(sql[0]));
+  std::string abs_node_mgr_tmp_data_path = kunlun::ConvertToAbsolutePath(node_mgr_tmp_data_path.c_str());
   sprintf(sql,
           "insert into kunlun_metadata_db.server_nodes "
           "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
+          "nodemgr_tmp_data_abs_path='%s',"
           "total_mem=16384,svc_since=current_timestamp(6);",
-          local_ip.c_str(), node_mgr_brpc_http_port);
+          local_ip.c_str(), node_mgr_brpc_http_port,abs_node_mgr_tmp_data_path.c_str());
   ret = mysql_conn.ExcuteQuery(sql, &result_set);
   if (ret <= 0) {
     syslog(Logger::ERROR,

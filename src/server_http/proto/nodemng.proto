@@ -3,11 +3,10 @@ package kunlunrpc;
 
 option cc_generic_services = true;
 
-message HttpRequest {
-};
-message HttpResponse {
-};
+message HttpRequest {};
+message HttpResponse {};
 
-//Rest of the http request content in body fetched from `attachment`
+// Rest of the http request content in body fetched from `attachment`
 
 service HttpService { rpc Emit(HttpRequest) returns (HttpResponse); };
+service FileService { rpc default_method(HttpRequest) returns (HttpResponse); };

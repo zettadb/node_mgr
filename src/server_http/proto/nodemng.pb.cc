@@ -75,7 +75,7 @@ void InitDefaultsHttpResponse() {
 }
 
 ::google::protobuf::Metadata file_level_metadata[2];
-const ::google::protobuf::ServiceDescriptor* file_level_service_descriptors[1];
+const ::google::protobuf::ServiceDescriptor* file_level_service_descriptors[2];
 
 const ::google::protobuf::uint32 TableStruct::offsets[] GOOGLE_PROTOBUF_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
   GOOGLE_PROTOBUF_GENERATED_MESSAGE_FIELD_OFFSET(::kunlunrpc::HttpRequest, _has_bits_),
@@ -124,10 +124,12 @@ void AddDescriptorsImpl() {
       "\n\rnodemng.proto\022\tkunlunrpc\"\r\n\013HttpReques"
       "t\"\016\n\014HttpResponse2F\n\013HttpService\0227\n\004Emit"
       "\022\026.kunlunrpc.HttpRequest\032\027.kunlunrpc.Htt"
-      "pResponseB\003\200\001\001"
+      "pResponse2P\n\013FileService\022A\n\016default_meth"
+      "od\022\026.kunlunrpc.HttpRequest\032\027.kunlunrpc.H"
+      "ttpResponseB\003\200\001\001"
   };
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
-      descriptor, 134);
+      descriptor, 216);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "nodemng.proto", &protobuf_RegisterTypes);
 }
@@ -617,6 +619,90 @@ HttpService_Stub::~HttpService_Stub() {
 }
 
 void HttpService_Stub::Emit(::google::protobuf::RpcController* controller,
+                              const ::kunlunrpc::HttpRequest* request,
+                              ::kunlunrpc::HttpResponse* response,
+                              ::google::protobuf::Closure* done) {
+  channel_->CallMethod(descriptor()->method(0),
+                       controller, request, response, done);
+}
+// ===================================================================
+
+FileService::~FileService() {}
+
+const ::google::protobuf::ServiceDescriptor* FileService::descriptor() {
+  protobuf_nodemng_2eproto::protobuf_AssignDescriptorsOnce();
+  return protobuf_nodemng_2eproto::file_level_service_descriptors[1];
+}
+
+const ::google::protobuf::ServiceDescriptor* FileService::GetDescriptor() {
+  return descriptor();
+}
+
+void FileService::default_method(::google::protobuf::RpcController* controller,
+                         const ::kunlunrpc::HttpRequest*,
+                         ::kunlunrpc::HttpResponse*,
+                         ::google::protobuf::Closure* done) {
+  controller->SetFailed("Method default_method() not implemented.");
+  done->Run();
+}
+
+void FileService::CallMethod(const ::google::protobuf::MethodDescriptor* method,
+                             ::google::protobuf::RpcController* controller,
+                             const ::google::protobuf::Message* request,
+                             ::google::protobuf::Message* response,
+                             ::google::protobuf::Closure* done) {
+  GOOGLE_DCHECK_EQ(method->service(), protobuf_nodemng_2eproto::file_level_service_descriptors[1]);
+  switch(method->index()) {
+    case 0:
+      default_method(controller,
+             ::google::protobuf::down_cast<const ::kunlunrpc::HttpRequest*>(request),
+             ::google::protobuf::down_cast< ::kunlunrpc::HttpResponse*>(response),
+             done);
+      break;
+    default:
+      GOOGLE_LOG(FATAL) << "Bad method index; this should never happen.";
+      break;
+  }
+}
+
+const ::google::protobuf::Message& FileService::GetRequestPrototype(
+    const ::google::protobuf::MethodDescriptor* method) const {
+  GOOGLE_DCHECK_EQ(method->service(), descriptor());
+  switch(method->index()) {
+    case 0:
+      return ::kunlunrpc::HttpRequest::default_instance();
+    default:
+      GOOGLE_LOG(FATAL) << "Bad method index; this should never happen.";
+      return *::google::protobuf::MessageFactory::generated_factory()
+          ->GetPrototype(method->input_type());
+  }
+}
+
+const ::google::protobuf::Message& FileService::GetResponsePrototype(
+    const ::google::protobuf::MethodDescriptor* method) const {
+  GOOGLE_DCHECK_EQ(method->service(), descriptor());
+  switch(method->index()) {
+    case 0:
+      return ::kunlunrpc::HttpResponse::default_instance();
+    default:
+      GOOGLE_LOG(FATAL) << "Bad method index; this should never happen.";
+      return *::google::protobuf::MessageFactory::generated_factory()
+          ->GetPrototype(method->output_type());
+  }
+}
+
+FileService_Stub::FileService_Stub(::google::protobuf::RpcChannel* channel)
+  : channel_(channel), owns_channel_(false) {}
+FileService_Stub::FileService_Stub(
+    ::google::protobuf::RpcChannel* channel,
+    ::google::protobuf::Service::ChannelOwnership ownership)
+  : channel_(channel),
+    owns_channel_(ownership == ::google::protobuf::Service::STUB_OWNS_CHANNEL) {}
+FileService_Stub::~FileService_Stub() {
+  if (owns_channel_) delete channel_;
+}
+
+void FileService_Stub::default_method(::google::protobuf::RpcController* controller,
                               const ::kunlunrpc::HttpRequest* request,
                               ::kunlunrpc::HttpResponse* response,
                               ::google::protobuf::Closure* done) {
