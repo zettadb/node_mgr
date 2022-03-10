@@ -4,6 +4,7 @@
 #include "log.h"
 #include "request_dealer/request_dealer.h"
 #include "strings.h"
+#include "zettalib/tool_func.h"
 #include <fcntl.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -11,6 +12,7 @@
 #include <unistd.h>
 
 int64_t node_mgr_brpc_http_port;
+extern std::string node_mgr_tmp_data_path;
 void HttpServiceImpl::Emit(google::protobuf::RpcController *cntl_base,
                            const HttpRequest *request, HttpResponse *response,
                            google::protobuf::Closure *done) {
@@ -45,14 +47,14 @@ end:
 struct Args {
   butil::intrusive_ptr<brpc::ProgressiveAttachment> pa;
   brpc::Controller *cntl;
-  
+  std::string resolved_file_path;
 };
 
 static void WrapTheFailedResponse(void *para, const char *info) {
   Args *args = static_cast<Args *>(para);
   brpc::Controller *cntl = args->cntl;
   // set resonse status to 500 (Internal error)
-  //cntl->http_response().set_status_code(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR);
+  // cntl->http_response().set_status_code(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR);
   Json::Value root;
   root["status"] = "failed";
   root["info"] = std::string(info);
@@ -62,15 +64,25 @@ static void WrapTheFailedResponse(void *para, const char *info) {
   args->pa->Write(res.c_str(), res.size());
 }
 
+// return none empty string means successfully
 static std::string ReolveFilename(const std::string &orig_filename) {
-  return "/home/summerxwu/code/kunlun/service/node_mgr/build/output/log/1";
+  std::string node_mgr_data_abs_path =
+      kunlun::ConvertToAbsolutePath(node_mgr_tmp_data_path.c_str());
+  std::string file_abs_path = node_mgr_data_abs_path + "/" + orig_filename;
+
+  bool ret = kunlun::CheckFileExists(file_abs_path.c_str());
+  if (!ret) {
+    syslog(Logger::INFO,"FileService File Not Found: %s",file_abs_path.c_str());
+    return "";
+  }
+  syslog(Logger::DEBUG1,"FileService File Found: %s",file_abs_path.c_str());
+  return file_abs_path;
 }
 
 #define SEND_BUFFER_SIZE 512
 static void *SendFile(void *para) {
   std::unique_ptr<Args> args(static_cast<Args *>(para));
-  const std::string &filename = args->cntl->http_request().unresolved_path();
-  std::string resolved = ReolveFilename(filename);
+  std::string resolved = args->resolved_file_path;
 
   char buff[SEND_BUFFER_SIZE] = {'\0'};
   size_t ret = 0;
@@ -110,11 +122,26 @@ void FileServiceImpl::default_method(google::protobuf::RpcController *cntl_base,
   brpc::ClosureGuard done_guard(done);
   brpc::Controller *cntl = static_cast<brpc::Controller *>(cntl_base);
   const std::string &filename = cntl->http_request().unresolved_path();
-  std::string resolved = ReolveFilename(filename);
- // cntl->http_response().set_status_code(brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR);
+  resolved_file_path_ = ReolveFilename(filename);
+  if (resolved_file_path_.empty()) {
+    cntl->http_response().set_status_code(
+        brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR);
+    char buff[4096] = {'\0'};
+    sprintf(buff,"File Not Found: %s",filename.c_str());
+    Json::Value root;
+    root["status"] = "failed";
+    root["info"] = buff;
+    Json::FastWriter writer;
+    writer.omitEndingLineFeed();
+    std::string res = writer.write(root);
+    cntl->response_attachment().append(res);
+    return ;
+  }
+
   std::unique_ptr<Args> para(new Args);
   para->pa = cntl->CreateProgressiveAttachment();
   para->cntl = cntl;
+  para->resolved_file_path = resolved_file_path_;
   bthread_t th;
   bthread_start_background(&th, nullptr, SendFile, para.release());
 }

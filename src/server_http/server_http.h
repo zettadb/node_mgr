@@ -32,6 +32,7 @@ public:
   void default_method(google::protobuf::RpcController *, const HttpRequest *,
                       HttpResponse *, google::protobuf::Closure *);
 private:
+  std::string resolved_file_path_;
 };
 
 extern brpc::Server *
