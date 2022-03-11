@@ -4,6 +4,7 @@
 #include "log.h"
 #include "request_dealer/request_dealer.h"
 #include "strings.h"
+#include "zettalib/microsec_interval.h"
 #include "zettalib/tool_func.h"
 #include <fcntl.h>
 #include <stdio.h>
@@ -48,6 +49,7 @@ struct Args {
   butil::intrusive_ptr<brpc::ProgressiveAttachment> pa;
   brpc::Controller *cntl;
   std::string resolved_file_path;
+  int64_t bytes_per_second = 5242880;
 };
 
 static void WrapTheFailedResponse(void *para, const char *info) {
@@ -72,17 +74,25 @@ static std::string ReolveFilename(const std::string &orig_filename) {
 
   bool ret = kunlun::CheckFileExists(file_abs_path.c_str());
   if (!ret) {
-    syslog(Logger::INFO,"FileService File Not Found: %s",file_abs_path.c_str());
+    syslog(Logger::INFO, "FileService File Not Found: %s",
+           file_abs_path.c_str());
     return "";
   }
-  syslog(Logger::DEBUG1,"FileService File Found: %s",file_abs_path.c_str());
+  syslog(Logger::DEBUG1, "FileService File Found: %s", file_abs_path.c_str());
   return file_abs_path;
 }
 
-#define SEND_BUFFER_SIZE 512
+#define SEND_BUFFER_SIZE 1024
 static void *SendFile(void *para) {
   std::unique_ptr<Args> args(static_cast<Args *>(para));
   std::string resolved = args->resolved_file_path;
+
+  // timeout interval is 100 microsecond
+  int interval_para_microsec = 2;
+  kunlun::MicroSecInterval timer(interval_para_microsec, 0);
+  int64_t bytes_per_sec = args->bytes_per_second;
+  int64_t bytes_send_counter = 0;
+  int inner_check_counter = 0;
 
   char buff[SEND_BUFFER_SIZE] = {'\0'};
   size_t ret = 0;
@@ -94,18 +104,44 @@ static void *SendFile(void *para) {
            strerror(errno));
     goto end;
   }
+
   for (;;) {
     ret = read(fd, buff, SEND_BUFFER_SIZE);
     if (ret < 0) {
       WrapTheFailedResponse(para, strerror(errno));
       syslog(Logger::ERROR, "Read File failed: %s", strerror(errno));
       break;
-    } else if (ret < SEND_BUFFER_SIZE) {
-      // eof
-      args->pa->Write(buff, ret);
+    } else if (ret == 0) {
+      // syslog(Logger::INFO,"read ret 0");
       break;
     } else {
-      args->pa->Write(buff, ret);
+      for (;;) {
+        if (timer.timeout()) {
+          // do check
+          inner_check_counter++;
+          if (inner_check_counter >= (1000000 / interval_para_microsec)) {
+            // traffic control under seconde level
+            inner_check_counter = 0;
+            bytes_send_counter = 0;
+          }
+          if (bytes_send_counter >= bytes_per_sec) {
+            // stop and wait in the rest of the one seconde long
+            // bthread_usleep counter as microseconde
+            bthread_usleep(
+                ((1000000 / interval_para_microsec) - inner_check_counter) *
+                interval_para_microsec);
+            inner_check_counter = 0;
+            bytes_send_counter = 0;
+            continue;
+          }
+        }
+
+        while (args->pa->Write(buff, ret) < 0) {
+          bthread_usleep(1);
+        }
+        bytes_send_counter += ret;
+        break;
+      }
     }
   }
 
@@ -127,7 +163,7 @@ void FileServiceImpl::default_method(google::protobuf::RpcController *cntl_base,
     cntl->http_response().set_status_code(
         brpc::HTTP_STATUS_INTERNAL_SERVER_ERROR);
     char buff[4096] = {'\0'};
-    sprintf(buff,"File Not Found: %s",filename.c_str());
+    sprintf(buff, "File Not Found: %s", filename.c_str());
     Json::Value root;
     root["status"] = "failed";
     root["info"] = buff;
@@ -135,13 +171,22 @@ void FileServiceImpl::default_method(google::protobuf::RpcController *cntl_base,
     writer.omitEndingLineFeed();
     std::string res = writer.write(root);
     cntl->response_attachment().append(res);
-    return ;
+    return;
   }
 
   std::unique_ptr<Args> para(new Args);
   para->pa = cntl->CreateProgressiveAttachment();
   para->cntl = cntl;
   para->resolved_file_path = resolved_file_path_;
+
+  std::string request_attachment = cntl->request_attachment().to_string();
+  Json::Value root;
+  Json::Reader reader;
+  reader.parse(request_attachment,root);
+  if(root.isMember("traffic_limit")){
+    para->bytes_per_second = ::atoll(root["traffic_limit"].asCString()); 
+  }
+
   bthread_t th;
   bthread_start_background(&th, nullptr, SendFile, para.release());
 }

@@ -16,10 +16,12 @@
 #include <unistd.h>
 #include <zettalib/errorcup.h>
 #include <zettalib/tool_func.h>
+#include <json/json.h>
 
 DEFINE_string(url, "", "URL of the request reource");
 DEFINE_string(out_prefix, "", "Downloaded File path prefix");
 DEFINE_string(out_filename, "", "Downloaded File name");
+DEFINE_int64(traffic_limit, 5242880, "Download traffic limit, default is 5242880(5 MB)");
 DEFINE_bool(
     output_override, false,
     "Whether override the output file if destination has the same name or not");
@@ -116,7 +118,15 @@ int main(int argc, char *argv[]) {
 
   brpc::Controller cntl;
   cntl.http_request().uri() = FLAGS_url;
-  cntl.http_request().set_method(brpc::HTTP_METHOD_GET);
+  cntl.http_request().set_method(brpc::HTTP_METHOD_POST);
+
+  char buff[1024] = {'\0'};
+  sprintf(buff,"%ld",FLAGS_traffic_limit);
+  Json::Value root;
+  root["traffic_limit"] = buff; 
+  Json::FastWriter writer;
+  writer.omitEndingLineFeed();
+  cntl.request_attachment().append(writer.write(buff));
 
   cntl.response_will_be_read_progressively();
   channel.CallMethod(NULL, &cntl, NULL, NULL, NULL);
