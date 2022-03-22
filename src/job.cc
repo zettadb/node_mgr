@@ -3444,7 +3444,7 @@ void Job::job_restore_storage(cJSON *root)
 	//check error
 	if(strstr(buf, "restore MySQL instance successfully") == NULL)
 	{
-		syslog(Logger::ERROR, "restore error: %s", buf);
+		syslog(Logger::ERROR, "restore storage error: %s", buf);
 		job_info = "restore cmd return error";
 		goto end;
 	}
@@ -3501,7 +3501,7 @@ void Job::job_restore_computer(cJSON *root)
 	FILE* pfd;
 	char buf[512];
 
-	std::string cmd, strtmp, cluster_name, meta_str;
+	std::string cmd, strtmp, cluster_name, meta_str, shard_map;
 	std::string ip;
 	int port;
 	int retry;
@@ -3557,14 +3557,22 @@ void Job::job_restore_computer(cJSON *root)
 	}
 	meta_str = item->valuestring;
 
+	item = cJSON_GetObjectItem(root, "shard_map");
+	if(item == NULL || item->valuestring == NULL)
+	{
+		job_info = "get shard_map error";
+		goto end;
+	}
+	shard_map = item->valuestring;
+
 	job_info = "restore computer wroking";
 	update_jobid_status(job_id, job_result, job_info);
 	syslog(Logger::INFO, "%s", job_info.c_str());
 
 	////////////////////////////////////////////////////////
 	//restore meta to computer
-	cmd = "restore -restoretype=compute -workdir=./data -port=" + std::to_string(port) + " -origclustername=";
-	cmd += cluster_name + " -origmetaclusterconnstr=" + meta_str + " -metaclusterconnstr=" + meta_str;
+	cmd = "restore -restoretype=compute -workdir=./data -port=" + std::to_string(port) + " -origclustername=" + cluster_name;
+	cmd += " -origmetaclusterconnstr=" + meta_str + " -metaclusterconnstr=" + meta_str + " -shard_map=" + shard_map;
 	syslog(Logger::INFO, "job_restore_computer cmd %s", cmd.c_str());
 	
 	pfd = popen(cmd.c_str(), "r");
@@ -3579,6 +3587,15 @@ void Job::job_restore_computer(cJSON *root)
 			syslog(Logger::INFO, "%s", buf);
 	}
 	pclose(pfd);
+
+	////////////////////////////////////////////////////////
+	//check error
+	if(strstr(buf, "restore compouter succeed") == NULL)
+	{
+		syslog(Logger::ERROR, "restore computer error: %s", buf);
+		job_info = "restore cmd return error";
+		goto end;
+	}
 
 	////////////////////////////////////////////////////////
 	//rm restore path
