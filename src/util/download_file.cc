@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
   root["traffic_limit"] = buff; 
   Json::FastWriter writer;
   writer.omitEndingLineFeed();
-  cntl.request_attachment().append(writer.write(buff));
+  cntl.request_attachment().append(writer.write(root));
 
   cntl.response_will_be_read_progressively();
   channel.CallMethod(NULL, &cntl, NULL, NULL, NULL);
