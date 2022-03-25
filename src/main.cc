@@ -21,6 +21,8 @@ extern int64_t thread_work_interval;
 
 int main(int argc, char **argv)
 {
+	Thread main_thd;
+
 	if (argc != 2)
 	{
 		printf("\nUsage: node_mgr node_mgr.cnf\n");
@@ -46,20 +48,21 @@ int main(int argc, char **argv)
 	if (System::create_instance(argv[1]))
 		return 1;
 
-	Thread main_thd;
-
+	// waiting for timestamp calibration or network connected
 	while(!Thread_manager::do_exit)
 	{
 		if(Job::get_instance()->check_timestamp())
 		{
+			// get instance from cluster_mgr
 			Instance_info::get_instance()->get_local_instance();
 			break;
 		}
 
-		syslog(Logger::ERROR, "check_timestamp error!");
+		syslog(Logger::ERROR, "check_timestamp error,  waiting ...");
 		Thread_manager::get_instance()->sleep_wait(&main_thd, thread_work_interval * 3000);
 	}
 
+	// node keep alive all instance
 	while (!Thread_manager::do_exit)
 	{
 		if (System::get_instance()->get_auto_pullup_working())

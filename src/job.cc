@@ -1847,12 +1847,12 @@ bool Job::job_create_program_path()
 {
 	std::string cmd, cmd_path, program_path;
 
-	//upzip to program_binaries_path for install cmd
+	//unzip to program_binaries_path for install cmd
 	//storage
 	cmd_path = program_binaries_path + "/" + storage_prog_package_name + "/dba_tools";
 	if(access(cmd_path.c_str(), F_OK) != 0)
 	{
-		syslog(Logger::INFO, "upzip %s.tgz" , storage_prog_package_name.c_str());
+		syslog(Logger::INFO, "unzip %s.tgz" , storage_prog_package_name.c_str());
 		program_path = program_binaries_path + "/" + storage_prog_package_name + ".tgz";
 
 		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
@@ -1864,7 +1864,7 @@ bool Job::job_create_program_path()
 	cmd_path = program_binaries_path + "/" + computer_prog_package_name + "/scripts";
 	if(access(cmd_path.c_str(), F_OK) != 0)
 	{
-		syslog(Logger::INFO, "upzip %s.tgz" , computer_prog_package_name.c_str());
+		syslog(Logger::INFO, "unzip %s.tgz" , computer_prog_package_name.c_str());
 		program_path = program_binaries_path + "/" + computer_prog_package_name + ".tgz";
 
 		cmd = "tar zxf " + program_path + " -C " + program_binaries_path;
@@ -2388,7 +2388,7 @@ void Job::job_install_storage(cJSON *root)
 	}
 
 	/////////////////////////////////////////////////////////////
-	//upzip from program_binaries_path to instance_binaries_path
+	//unzip from program_binaries_path to instance_binaries_path
 	program_path = program_binaries_path + "/" + storage_prog_package_name + ".tgz";
 	instance_path = instance_binaries_path + "/storage/" + std::to_string(port);
 
@@ -2669,7 +2669,7 @@ void Job::job_install_computer(cJSON *root)
 	}
 
 	/////////////////////////////////////////////////////////////
-	//upzip from program_binaries_path to instance_binaries_path
+	//unzip from program_binaries_path to instance_binaries_path
 	program_path = program_binaries_path + "/" + computer_prog_package_name + ".tgz";
 	instance_path = instance_binaries_path + "/computer/" + std::to_string(port);
 
