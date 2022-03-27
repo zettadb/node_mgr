@@ -18,6 +18,7 @@ endif()
 
 set(ZETTALIB_INCLUDE_PATH "/home/snowao/code/kunlun/zettalib/build/output/include")
 set(ZETTALIB_LIB_PATH "/home/snowao/code/kunlun/zettalib/build/output/lib")
+set(VENDOR_OUTPUT_PATH "/home/snowao/code/kunlun/zettalib/src/vendor/vendor_output")
 
 if (NOT DEFINED ZETTALIB_INCLUDE_PATH)
 	message(FATAL_ERROR "Variables ZETTALIB_INCLUDE_PATH must be specified")
@@ -26,7 +27,7 @@ elseif (NOT DEFINED ZETTALIB_LIB_PATH)
 endif()
 
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
-link_directories(${PROJECT_SOURCE_DIR}/src/vendor/lib)
+link_directories(${VENDOR_OUTPUT_PATH}/lib)
 link_directories(${ZETTALIB_LIB_PATH})
 
 add_subdirectory(src/server_http)
@@ -50,7 +51,7 @@ add_executable(node_mgr
 configure_file(src/sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
 	"${PROJECT_BINARY_DIR}"
-  "${PROJECT_SOURCE_DIR}/src/vendor/include"
+  "${VENDOR_OUTPUT_PATH}/include"
   "${ZETTALIB_INCLUDE_PATH}")
 target_link_libraries(node_mgr 
   server_http 
@@ -61,8 +62,8 @@ target_link_libraries(node_mgr
   libgflags.a 
   libleveldb.a 
   libjsoncpp.a
-  mariadb 
-  pq 
+  libmariadb.a 
+  libpq.a 
   pthread 
   libssl.a 
   libcrypto.a 

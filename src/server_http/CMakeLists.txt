@@ -1,6 +1,6 @@
 add_library(server_http OBJECT server_http.cc  proto/nodemng.pb.cc)
 target_include_directories(server_http INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(server_http PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../")
-target_include_directories(server_http PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../vendor/include")
+target_include_directories(server_http PUBLIC "${VENDOR_OUTPUT_PATH}/include")
 target_include_directories(server_http PUBLIC "${PROJECT_BINARY_DIR}")
 target_include_directories(server_http PUBLIC "${ZETTALIB_INCLUDE_PATH}")

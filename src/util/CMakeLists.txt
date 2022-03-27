@@ -3,11 +3,11 @@ add_executable(download_file download_file.cc )
 include_directories(
   "${PROJECT_SOURCE_DIR}/src"
   "${CMAKE_CURRENT_SOURCE_DIR}"
-  "${PROJECT_SOURCE_DIR}/src/vendor/include"
+  "${VENDOR_OUTPUT_PATH}/include"
   "${ZETTALIB_INCLUDE_PATH}"
 )
 link_directories(
-  "${PROJECT_SOURCE_DIR}/src/vendor/lib"
+  "${VENDOR_OUTPUT_PATH}/lib"
   "${ZETTALIB_LIB_PATH}"
   )
 
@@ -18,9 +18,9 @@ set(LocalLibrariesList
   "libgflags.a" 
   "libleveldb.a" 
   "libjsoncpp.a"
-  "pthread"
   "libssl.a" 
   "libcrypto.a"
+  "pthread"
   "dl"
   "z"
   )
