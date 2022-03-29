@@ -7,13 +7,13 @@
 
 #ifndef GLOBAL_INCLUDED
 #define GLOBAL_INCLUDED
-#include <cstdint>
-#include <cstdlib>
-#include <cstdio>
 #include <cassert>
-#include <strings.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <pthread.h>
+#include <strings.h>
 
 typedef uint32_t uint;
 #ifdef ENABLE_DEBUG
@@ -22,10 +22,9 @@ typedef uint32_t uint;
 #define Assert(expr)
 #endif
 
-//some sql buf strlen(const_str) < sizeof(const_str)-1
+// some sql buf strlen(const_str) < sizeof(const_str)-1
 //#define CONST_STR_PTR_LEN(const_str) const_str,(sizeof(const_str) - 1)
-#define CONST_STR_PTR_LEN(const_str) const_str,strlen(const_str)
-
+#define CONST_STR_PTR_LEN(const_str) const_str, strlen(const_str)
 
 #define KUNLUN_METADATA_DBNAME "kunlun_metadata_db"
 
@@ -37,19 +36,13 @@ typedef uint32_t uint;
 inline bool likely(bool expr) { return __builtin_expect(expr, true); }
 inline bool unlikely(bool expr) { return __builtin_expect(expr, false); }
 
-class Scopped_mutex
-{
-	pthread_mutex_t &mtx;
-public:
-	Scopped_mutex(pthread_mutex_t&m) : mtx(m)
-	{
-		pthread_mutex_lock(&mtx);
-	}
+class Scopped_mutex {
+  pthread_mutex_t &mtx;
 
-	~Scopped_mutex()
-	{
-		pthread_mutex_unlock(&mtx);
-	}
+public:
+  Scopped_mutex(pthread_mutex_t &m) : mtx(m) { pthread_mutex_lock(&mtx); }
+
+  ~Scopped_mutex() { pthread_mutex_unlock(&mtx); }
 };
 
 #endif // !GLOBAL_INCLUDED

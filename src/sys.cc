@@ -1,9 +1,8 @@
 /*
-         Copyright (c) 2019-2021 ZettaDB inc. All rights reserved.
+   Copyright (c) 2019-2021 ZettaDB inc. All rights reserved.
 
-         This source code is licensed under Apache 2.0 License,
-         combined with Common Clause Condition 1.0, as detailed in the NOTICE
-   file.
+   This source code is licensed under Apache 2.0 License,
+   combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
 */
 
 #include "sys.h"
@@ -143,13 +142,15 @@ bool System::regiest_to_meta() {
     }
   }
   bzero(sql, sizeof(sql) / sizeof(sql[0]));
-  std::string abs_node_mgr_tmp_data_path = kunlun::ConvertToAbsolutePath(node_mgr_tmp_data_path.c_str());
+  std::string abs_node_mgr_tmp_data_path =
+      kunlun::ConvertToAbsolutePath(node_mgr_tmp_data_path.c_str());
   sprintf(sql,
           "insert into kunlun_metadata_db.server_nodes "
           "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
           "nodemgr_tmp_data_abs_path='%s',"
           "total_mem=16384,svc_since=current_timestamp(6);",
-          local_ip.c_str(), node_mgr_brpc_http_port,abs_node_mgr_tmp_data_path.c_str());
+          local_ip.c_str(), node_mgr_brpc_http_port,
+          abs_node_mgr_tmp_data_path.c_str());
   ret = mysql_conn.ExcuteQuery(sql, &result_set);
   if (ret <= 0) {
     syslog(Logger::ERROR,

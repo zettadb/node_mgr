@@ -1,9 +1,8 @@
 /*
-         Copyright (c) 2019-2021 ZettaDB inc. All rights reserved.
+   Copyright (c) 2019-2021 ZettaDB inc. All rights reserved.
 
-         This source code is licensed under Apache 2.0 License,
-         combined with Common Clause Condition 1.0, as detailed in the NOTICE
-   file.
+   This source code is licensed under Apache 2.0 License,
+   combined with Common Clause Condition 1.0, as detailed in the NOTICEfile.
 */
 
 #include "config.h"
@@ -48,6 +47,8 @@ extern std::string meta_user;
 extern std::string meta_pwd;
 extern std::string node_mgr_util_path;
 extern std::string node_mgr_tmp_data_path;
+extern std::string prometheus_path;
+extern int64_t prometheus_port_start;
 
 Configs *Configs::get_instance() {
   if (m_inst == NULL)
@@ -240,6 +241,10 @@ void Configs::define_configs() {
                     "node_mgr_util_path");
   define_str_config("node_mgr_tmp_data_path", node_mgr_tmp_data_path, "../data",
                     "node_mgr_tmp_data_path");
+  define_str_config("prometheus_path", prometheus_path,
+                    "../../../program_binaries/prometheus", "prometheus_path");
+  define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535,
+                    57010, "prometheus_port_start");
 
   /*
           There is no practical way we can prevent multiple cluster_mgr
