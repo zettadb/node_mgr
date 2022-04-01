@@ -74,8 +74,10 @@ target_link_libraries(node_mgr
   dl
   z
 )
-set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output")
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output" CACHE PATH "..." FORCE)
+endif()
 install(TARGETS node_mgr DESTINATION bin)
 install(TARGETS delay_demo DESTINATION bin/util)
 install(TARGETS download_file DESTINATION bin/util)
