@@ -69,7 +69,7 @@ cluster_mgr_http_port = 6001
 node_mgr_http_port = 5010
 
 # node_mgr brpc http server port
-node_mgr_brpc_http_port = 5011
+brpc_http_port = 5011
 
 # node_mgr util folder path
 node_mgr_util_path = ./util
@@ -97,3 +97,6 @@ prometheus_path = ../../../program_binaries/prometheus
 
 # prometheus port start
 prometheus_port_start = 57010
+
+# cluster_mgr ip
+local_ip = 127.0.0.1

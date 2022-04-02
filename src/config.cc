@@ -49,6 +49,7 @@ extern std::string node_mgr_util_path;
 extern std::string node_mgr_tmp_data_path;
 extern std::string prometheus_path;
 extern int64_t prometheus_port_start;
+extern std::string local_ip;
 
 Configs *Configs::get_instance() {
   if (m_inst == NULL)
@@ -199,7 +200,7 @@ void Configs::define_configs() {
                     "Number of http server threads to create.");
   define_int_config("node_mgr_http_port", node_mgr_http_port, 1000, 65535, 5001,
                     "http server listen port.");
-  define_int_config("node_mgr_brpc_http_port", node_mgr_brpc_http_port, 1000,
+  define_int_config("brpc_http_port", node_mgr_brpc_http_port, 1000,
                     65535, 5011, "node_mgr brpc http server listen port.");
 
   char def_log_path[64];
@@ -245,6 +246,8 @@ void Configs::define_configs() {
                     "../../../program_binaries/prometheus", "prometheus_path");
   define_int_config("prometheus_port_start", prometheus_port_start, 0, 65535,
                     57010, "prometheus_port_start");
+  define_str_config("local_ip", local_ip,
+                    "127.0.0.1", "node_mgr ip");
 
   /*
           There is no practical way we can prevent multiple cluster_mgr

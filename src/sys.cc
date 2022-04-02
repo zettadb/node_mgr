@@ -103,14 +103,14 @@ bool System::regiest_to_meta() {
            mysql_conn.getErr());
     return false;
   }
-  char addr[256] = {0};
-  if (kunlun::GetIpFromInterface(dev_interface.c_str(), addr) != 0) {
-    return false;
-  }
+ // char addr[256] = {0};
+ // if (kunlun::GetIpFromInterface(dev_interface.c_str(), addr) != 0) {
+ //   return false;
+ // }
 
-  local_ip = addr;
-  syslog(Logger::INFO, "Get addr string '%s' from interface: %s",
-         local_ip.c_str(), dev_interface.c_str());
+ // local_ip = addr;
+ // syslog(Logger::INFO, "Get addr string '%s' from interface: %s",
+ //        local_ip.c_str(), dev_interface.c_str());
 
   kunlun::MysqlResult result_set;
   char sql[2048] = {0};
