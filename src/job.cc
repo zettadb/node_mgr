@@ -2523,6 +2523,7 @@ start:
 	if(set_lib.size()>0 && retry-->0 && !Job::do_exit)
 	{
 		job_storage_add_lib(set_lib);
+		job_control_storage(port, 1);
 		goto start;
 	}
 
@@ -2773,6 +2774,7 @@ start:
 	if(set_lib.size()>0 && retry-->0 && !Job::do_exit)
 	{
 		job_computer_add_lib(set_lib);
+		job_control_computer(port, 1);
 		goto start;
 	}
 
