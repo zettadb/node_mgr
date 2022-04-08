@@ -37,6 +37,7 @@ link_directories(${ZETTALIB_LIB_PATH})
 add_subdirectory(src/server_http)
 add_subdirectory(src/request_dealer)
 add_subdirectory(src/util)
+add_subdirectory(src/util_func)
 
 add_executable(node_mgr
   src/config.cc 
@@ -54,12 +55,14 @@ add_executable(node_mgr
   src/cjson.cc)
 configure_file(src/sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
-	"${PROJECT_BINARY_DIR}"
+  "${PROJECT_BINARY_DIR}"
+  "${ZETTALIB_INCLUDE_PATH}"
   "${VENDOR_OUTPUT_PATH}/include"
-  "${ZETTALIB_INCLUDE_PATH}")
+  "${PROJECT_SOURCE_DIR}/src/util_func")
 target_link_libraries(node_mgr 
   server_http 
   request_dealer
+  util_func 
   libzettalib.a 
   libbrpc.a 
   libprotobuf.a 

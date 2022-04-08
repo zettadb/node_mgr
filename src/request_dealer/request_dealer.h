@@ -10,6 +10,7 @@
 
 #include "zettalib/biodirectpopen.h"
 #include "zettalib/errorcup.h"
+#include "util_func/meta_info.h"
 #include "json/json.h"
 #include <string>
 
@@ -26,6 +27,7 @@ public:
 
 private:
   bool protocalValid();
+  bool executeCommand();
   void constructCommand();
   std::string getStatusStr();
   std::string getInfo();
@@ -41,6 +43,7 @@ private:
   std::string execute_command_;
   kunlun::BiodirectPopen *popen_p_;
   bool deal_success_;
+  kunlun::ClusterRequestTypes request_type_;
 };
 
 #endif /*_NODE_MANAGER_REQUEST_DEALER_H_*/

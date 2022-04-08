@@ -33,16 +33,16 @@ std::string local_ip;
 std::string dev_interface;
 
 System::~System() {
-  Http_server::get_instance()->do_exit = 1;
-  Http_server::get_instance()->join_all();
-  delete Http_server::get_instance();
+  //Http_server::get_instance()->do_exit = 1;
+  //Http_server::get_instance()->join_all();
+  //delete Http_server::get_instance();
 
-  Job::get_instance()->do_exit = 1;
-  Job::get_instance()->join_all();
-  delete Job::get_instance();
+  //Job::get_instance()->do_exit = 1;
+  //Job::get_instance()->join_all();
+  //delete Job::get_instance();
 
   // delete Hdfs_client::get_instance();
-  delete Http_client::get_instance();
+  //delete Http_client::get_instance();
   delete Instance_info::get_instance();
 
   delete Configs::get_instance();
@@ -74,12 +74,12 @@ int System::create_instance(const std::string &cfg_path) {
     goto end;
   if ((ret = (Instance_info::get_instance() == NULL)) != 0)
     goto end;
-  if ((ret = (Http_client::get_instance() == NULL)) != 0)
-    goto end;
-  if ((ret = Job::get_instance()->start_job_thread()) != 0)
-    goto end;
-  if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
-    goto end;
+  //if ((ret = (Http_client::get_instance() == NULL)) != 0)
+  //  goto end;
+  //if ((ret = Job::get_instance()->start_job_thread()) != 0)
+  //  goto end;
+  //if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
+  //  goto end;
   if ((ret = regiest_to_meta()) == false)
     goto end;
 

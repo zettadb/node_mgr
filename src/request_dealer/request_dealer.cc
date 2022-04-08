@@ -19,45 +19,49 @@ bool RequestDealer::ParseRequest() {
   if (!protocalValid()) {
     return false;
   }
-  constructCommand();
+  
   return true;
 }
 
 bool RequestDealer::Deal() {
 
-  syslog(Logger::INFO, "Will execute : %s", execute_command_.c_str());
-  popen_p_ = new kunlun::BiodirectPopen(execute_command_.c_str());
-  bool ret = popen_p_->Launch("rw");
-  if (!ret) {
-    setErr("child return code: %d, %s", popen_p_->get_chiled_status(),
-           popen_p_->getErr());
-    
-    return false;
+  bool ret = false;
+  switch (request_type_) {
+  case kunlun::kExecuteCommandType:
+    ret = executeCommand();
+    break;
+
+  default:
+    setErr("Unrecongnized job type");
+    break;
   }
-  FILE *stderr_fp = popen_p_->getReadStdErrFp();
-  char buffer[8192];
-  if (fgets(buffer, 8192, stderr_fp) != nullptr) {
-    setErr("stderr: %s, return code: %d", buffer,
-           popen_p_->get_chiled_status());
-    syslog(Logger::ERROR, "Biopopen stderr: %s", buffer);
-    return false;
-  }
-  deal_success_ = true;
-  return true;
+
+  return ret;
 }
 
 bool RequestDealer::protocalValid() {
   bool ret = false;
-  if (!json_root_.isMember("command_name")) {
-    setErr("'command_name' field missing");
-    goto end;
-  }
-  if (!json_root_.isMember("para") || !json_root_["para"].isArray()) {
-    setErr("'para' field is missing or is not a json array object");
-    goto end;
-  }
+
   if (!json_root_.isMember("cluster_mgr_request_id")) {
     setErr("'cluster_mgr_request_id' field is missing");
+    goto end;
+  }
+  if (!json_root_.isMember("job_type")) {
+    setErr("'job_type' field is missing");
+    goto end;
+  }
+  if (!json_root_.isMember("paras")) {
+    setErr("'paras' field missing");
+    goto end;
+  }
+  if (!json_root_.isMember("job_type")) {
+    setErr("'job_type' field missing");
+    goto end;
+  }
+
+  request_type_ = kunlun::GetReqTypeEnumByStr(json_root_["job_type"].asString().c_str());
+  if(request_type_ == kunlun::kRequestTypeMax){
+    setErr("'job_type' no support");
     goto end;
   }
 
@@ -92,9 +96,34 @@ std::string RequestDealer::FetchResponse() {
   return writer.write(root);
 }
 
+bool RequestDealer::executeCommand(){
+
+  constructCommand();
+  syslog(Logger::INFO, "Will execute : %s", execute_command_.c_str());
+  popen_p_ = new kunlun::BiodirectPopen(execute_command_.c_str());
+  bool ret = popen_p_->Launch("rw");
+  if (!ret) {
+    setErr("child return code: %d, %s", popen_p_->get_chiled_status(),
+           popen_p_->getErr());
+    
+    return false;
+  }
+  FILE *stderr_fp = popen_p_->getReadStdErrFp();
+  char buffer[8192];
+  if (fgets(buffer, 8192, stderr_fp) != nullptr) {
+    setErr("stderr: %s, return code: %d", buffer,
+           popen_p_->get_chiled_status());
+    syslog(Logger::ERROR, "Biopopen stderr: %s", buffer);
+    return false;
+  }
+  deal_success_ = true;
+  return true;
+}
+
 void RequestDealer::constructCommand() {
-  std::string command_name = json_root_["command_name"].asString();
-  Json::Value para_json_array = json_root_["para"];
+  Json::Value para_json = json_root_["paras"];
+  std::string command_name = para_json["command_name"].asString();
+  Json::Value para_json_array = para_json["command_para"];
   std::string para_str = command_name + " ";
   for (Json::Value::ArrayIndex i = 0; i < para_json_array.size(); i++) {
     if (i > 0) {
