@@ -13,6 +13,7 @@
 #include "log.h"
 #include "mysql_conn.h"
 #include "pgsql_conn.h"
+#include "json/json.h"
 #include "sys.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -726,7 +727,7 @@ bool Instance_info::get_vec_path(std::vector<std::string> &vec_path,
   return (vec_path.size() > 0);
 }
 
-bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
+bool Instance_info::get_path_space(std::vector<std::string> &vec_paths,
                                    std::string &result) {
   bool ret = true;
   std::string info, path_used;
@@ -739,10 +740,10 @@ bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
   vec_sub_path.emplace_back("/instance_data/comp_datadir");
 
   std::vector<std::string> vec_path_index;
-  vec_path_index.emplace_back("paths0");
-  vec_path_index.emplace_back("paths1");
-  vec_path_index.emplace_back("paths2");
-  vec_path_index.emplace_back("paths3");
+  vec_path_index.emplace_back("path0");
+  vec_path_index.emplace_back("path1");
+  vec_path_index.emplace_back("path2");
+  vec_path_index.emplace_back("path3");
 
   vec_vec_path_used_free.clear();
 
@@ -781,38 +782,25 @@ bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
   }
 
   // json for return
-  cJSON *root = cJSON_CreateObject();
-  cJSON *item;
-  cJSON *item_sub;
-  cJSON *item_paths;
-  char *cjson = NULL;
-
+  Json::Value root;
+  
   if (ret) {
-    cJSON_AddStringToObject(root, "result", "succeed");
-    cJSON_AddStringToObject(root, "info", "");
-
     for (int i = 0; i < 4; i++) {
-      item_paths = cJSON_CreateArray();
-      cJSON_AddItemToObject(root, vec_path_index[i].c_str(), item_paths);
+      Json::Value list;
       for (auto &path_used_free : vec_vec_path_used_free[i]) {
-        item_sub = cJSON_CreateObject();
-        cJSON_AddItemToArray(item_paths, item_sub);
-        cJSON_AddStringToObject(item_sub, "path",
-                                std::get<0>(path_used_free).c_str());
-        cJSON_AddNumberToObject(item_sub, "used", std::get<1>(path_used_free));
-        cJSON_AddNumberToObject(item_sub, "free", std::get<2>(path_used_free));
+        Json::Value para_json_array;
+        para_json_array["path"] = std::get<0>(path_used_free);
+        para_json_array["used"] = std::get<1>(path_used_free);
+        para_json_array["free"] = std::get<2>(path_used_free);
+        list.append(para_json_array);
       }
+      root[vec_path_index[i]] = list;
     }
-  } else {
-    info += " is error";
-    cJSON_AddStringToObject(root, "result", "error");
-    cJSON_AddStringToObject(root, "info", info.c_str());
-  }
 
-  cjson = cJSON_Print(root);
-  result = cjson;
-  cJSON_Delete(root);
-  free(cjson);
+    Json::FastWriter writer;
+    writer.omitEndingLineFeed();
+    result = writer.write(root);
+  }
 
   return ret;
 }

@@ -579,7 +579,7 @@ bool Job::get_path_space(cJSON *root, std::string &str_ret) {
 
   ////////////////////////////////////////////////////////////
   // set path and get space
-  Instance_info::get_instance()->set_path_space(vec_paths, str_ret);
+  Instance_info::get_instance()->get_path_space(vec_paths, str_ret);
 
   return true;
 }
@@ -2305,6 +2305,7 @@ start:
 
   if (set_lib.size() > 0 && retry-- > 0 && !Job::do_exit) {
     job_storage_add_lib(set_lib);
+    job_control_storage(port, 1);
     goto start;
   }
 
@@ -2536,6 +2537,7 @@ start:
 
   if (set_lib.size() > 0 && retry-- > 0 && !Job::do_exit) {
     job_computer_add_lib(set_lib);
+    job_control_computer(port, 1);
     goto start;
   }
 
@@ -3285,7 +3287,7 @@ void Job::job_restore_computer(cJSON *root) {
 
   ////////////////////////////////////////////////////////
   // check error
-  if (strstr(buf, "restore compouter succeed") == NULL) {
+  if (strstr(buf, "restore Compute successfully") == NULL) {
     syslog(Logger::ERROR, "restore computer error: %s", buf);
     job_info = "restore cmd return error";
     goto end;

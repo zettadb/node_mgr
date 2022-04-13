@@ -84,7 +84,7 @@ public:
   bool get_path_free(std::string &path, uint64_t &free);
   void trimString(std::string &str);
   bool get_vec_path(std::vector<std::string> &vec_path, std::string &paths);
-  bool set_path_space(std::vector<std::string> &vec_paths, std::string &result);
+  bool get_path_space(std::vector<std::string> &vec_paths, std::string &result);
 };
 
 #endif // !INSTANCE_INFO_H

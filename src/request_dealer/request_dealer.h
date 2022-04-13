@@ -29,6 +29,7 @@ private:
   bool protocalValid();
   bool executeCommand();
   void constructCommand();
+  bool getPathsSpace();
   std::string getStatusStr();
   std::string getInfo();
 
@@ -43,6 +44,7 @@ private:
   std::string execute_command_;
   kunlun::BiodirectPopen *popen_p_;
   bool deal_success_;
+  std::string deal_info_;
   kunlun::ClusterRequestTypes request_type_;
 };
 

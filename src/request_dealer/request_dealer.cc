@@ -3,6 +3,7 @@
 #include "string.h"
 #include "zettalib/biodirectpopen.h"
 #include "zettalib/tool_func.h"
+#include "instance_info.h"
 #include <algorithm>
 #include <vector>
 
@@ -29,6 +30,9 @@ bool RequestDealer::Deal() {
   switch (request_type_) {
   case kunlun::kExecuteCommandType:
     ret = executeCommand();
+    break;
+  case kunlun::kGetPathsSpaceType:
+    ret = getPathsSpace();
     break;
 
   default:
@@ -79,7 +83,7 @@ std::string RequestDealer::getInfo(){
   if (!deal_success_){
     return getErr();
   }
-  return "success";
+  return deal_info_;
 }
 
 std::string RequestDealer::FetchResponse() {
@@ -88,11 +92,18 @@ std::string RequestDealer::FetchResponse() {
   root["cluster_mgr_request_id"] = json_root_["cluster_mgr_request_id"].asString();
   root["task_spec_info"] = json_root_["task_spec_info"].asString();
   root["status"] = getStatusStr();
-  root["info"] = getInfo();
+
+  Json::Value info_json;
+  Json::Reader reader;
+  bool ret = reader.parse(getInfo().c_str(), info_json);
+  if (ret) {
+    root["info"] = info_json;
+  } else {
+    root["info"] = getInfo();
+  }
 
   Json::FastWriter writer;
   writer.omitEndingLineFeed();
-
   return writer.write(root);
 }
 
@@ -117,6 +128,7 @@ bool RequestDealer::executeCommand(){
     return false;
   }
   deal_success_ = true;
+  deal_info_ = "success";
   return true;
 }
 
@@ -177,4 +189,18 @@ RequestDealer::~RequestDealer() {
   if (popen_p_) {
     delete popen_p_;
   }
+}
+
+bool RequestDealer::getPathsSpace()
+{
+  Json::Value para_json = json_root_["paras"];
+  std::vector<std::string> vec_paths;
+
+  vec_paths.emplace_back(para_json["path0"].asString());
+  vec_paths.emplace_back(para_json["path1"].asString());
+  vec_paths.emplace_back(para_json["path2"].asString());
+  vec_paths.emplace_back(para_json["path3"].asString());
+
+  deal_success_ = Instance_info::get_instance()->get_path_space(vec_paths, deal_info_);
+  return deal_success_;
 }

@@ -55,13 +55,10 @@ meta_user = pgx
 meta_pwd = pgx_pwd
 
 ##################################################################
-# for web http interfacde
-
-# Net Interface device name 
-dev_interface = enp0s3
+# for web http interface
 
 # node_mgr brpc http server port
-brpc_http_port = 5010
+brpc_http_port = 57002
 
 # cluster_mgr ip
 local_ip = 127.0.0.1

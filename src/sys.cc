@@ -115,7 +115,7 @@ bool System::regiest_to_meta() {
   kunlun::MysqlResult result_set;
   char sql[2048] = {0};
   sprintf(sql,
-          "select * from kunlun_metadata_db.server_nodes where hostaddr = '%s'",
+          "select nodemgr_port from kunlun_metadata_db.server_nodes where hostaddr = '%s'",
           local_ip.c_str());
 
   int ret = mysql_conn.ExcuteQuery(sql, &result_set);
@@ -127,36 +127,38 @@ bool System::regiest_to_meta() {
   if (result_set.GetResultLinesNum() > 0) {
     int lines = result_set.GetResultLinesNum();
     for (int i = 0; i < lines; i++) {
-      // replace the conflict record in the kunlun_metadata_db.server_nodes;
+      if(atoi(result_set[i]["nodemgr_port"]) == node_mgr_brpc_http_port)
+        continue;
+      // update the conflict record in the kunlun_metadata_db.server_nodes;
       bzero(sql, sizeof(sql) / sizeof(sql[0]));
       sprintf(
           sql,
-          "delete from kunlun_metadata_db.server_nodes where id = %s limit 1;",
-          result_set[i]["id"]);
+          "update kunlun_metadata_db.server_nodes "
+          "set nodemgr_port=%d where hostaddr='%s'",
+          node_mgr_brpc_http_port, local_ip.c_str());
       kunlun::MysqlResult rs;
       ret = mysql_conn.ExcuteQuery(sql, &rs);
       if (ret <= 0) {
-        syslog(Logger::ERROR, "query:[%s] should affect at least one rows",
+        syslog(Logger::ERROR, "update:[%s] should affect at least one rows",
                sql);
       }
     }
-  }
-  bzero(sql, sizeof(sql) / sizeof(sql[0]));
-  std::string abs_node_mgr_tmp_data_path =
-      kunlun::ConvertToAbsolutePath(node_mgr_tmp_data_path.c_str());
-  sprintf(sql,
-          "insert into kunlun_metadata_db.server_nodes "
-          "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
-          "nodemgr_tmp_data_abs_path='%s',"
-          "total_mem=16384,svc_since=current_timestamp(6);",
-          local_ip.c_str(), node_mgr_brpc_http_port,
-          abs_node_mgr_tmp_data_path.c_str());
-  ret = mysql_conn.ExcuteQuery(sql, &result_set);
-  if (ret <= 0) {
-    syslog(Logger::ERROR,
-           "regiest current nodemanager to metadata db failed: %s",
-           mysql_conn.getErr());
-    return false;
+  } else {
+    bzero(sql, sizeof(sql) / sizeof(sql[0]));
+    std::string abs_node_mgr_tmp_data_path =
+        kunlun::ConvertToAbsolutePath(node_mgr_tmp_data_path.c_str());
+    sprintf(sql,
+            "insert into kunlun_metadata_db.server_nodes "
+            "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
+            "total_mem=16384,svc_since=current_timestamp(6);",
+            local_ip.c_str(), node_mgr_brpc_http_port);
+    ret = mysql_conn.ExcuteQuery(sql, &result_set);
+    if (ret <= 0) {
+      syslog(Logger::ERROR,
+            "regiest current nodemanager to metadata db failed: %s",
+            mysql_conn.getErr());
+      return false;
+    }
   }
   syslog(Logger::INFO, "regiest current node_mgr to metadata db successfully");
   return true;

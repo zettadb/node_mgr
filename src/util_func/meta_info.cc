@@ -41,6 +41,9 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "execute_command"_hash:
     type_enum = kExecuteCommandType;
     break;
+  case "get_paths_space"_hash:
+    type_enum = kGetPathsSpaceType;
+    break;
 
   // addtional type convert should add above
   default:

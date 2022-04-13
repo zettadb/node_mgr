@@ -25,6 +25,7 @@ enum RequestStatus {
 enum ClusterRequestTypes {
   kRequestTypeUndefined = 0,
   kExecuteCommandType,
+  kGetPathsSpaceType,
   
   // addtional type should add above
   kRequestTypeMax = 1000
