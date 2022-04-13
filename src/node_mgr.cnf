@@ -30,7 +30,7 @@ max_log_file_size = 100
 log_file = ./node_mgr.log
 
 ##################################################################
-# for web http interfacde
+# for web http interface
 
 #Number of worker threads to create and maintain.
 num_worker_threads=1

@@ -3592,7 +3592,7 @@ void Job::job_restore_computer(cJSON *root)
 
 	////////////////////////////////////////////////////////
 	//check error
-	if(strstr(buf, "restore compouter succeed") == NULL)
+	if(strstr(buf, "restore Compute successfully") == NULL)
 	{
 		syslog(Logger::ERROR, "restore computer error: %s", buf);
 		job_info = "restore cmd return error";
