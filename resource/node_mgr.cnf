@@ -58,7 +58,7 @@ meta_pwd = pgx_pwd
 # for web http interface
 
 # node_mgr brpc http server port
-brpc_http_port = 57002
+brpc_http_port = 57005
 
 # cluster_mgr ip
 local_ip = 127.0.0.1
