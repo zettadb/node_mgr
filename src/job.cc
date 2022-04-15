@@ -3574,7 +3574,7 @@ void Job::job_restore_computer(cJSON *root)
 	////////////////////////////////////////////////////////
 	//restore meta to computer
 	cmd = "restore -restoretype=compute -workdir=./data -port=" + std::to_string(port) + " -origclustername=" + cluster_name;
-	cmd += " -origmetaclusterconnstr=" + meta_str + " -metaclusterconnstr=" + meta_str + " -shard_map=" + shard_map;
+	cmd += " -origmetaclusterconnstr=" + meta_str + " -metaclusterconnstr=" + meta_str + " -shard_map=\"" + shard_map + "\"";
 	syslog(Logger::INFO, "job_restore_computer cmd %s", cmd.c_str());
 	
 	pfd = popen(cmd.c_str(), "r");
