@@ -49,10 +49,7 @@ add_executable(node_mgr
   src/mysql_conn.cc 
   src/pgsql_conn.cc 
   src/instance_info.cc 
-  src/http_server.cc 
-  src/http_client.cc 
-  src/job.cc 
-  src/cjson.cc)
+  src/job.cc)
 configure_file(src/sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
   "${PROJECT_BINARY_DIR}"

@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  kunlun::procDaemonize();
+  //kunlun::procDaemonize();
   kunlun::procInvokeKeepalive();
 
   if (System::create_instance(argv[1])) {

@@ -66,7 +66,6 @@ public:
   }
 
   void get_local_instance();
-  void get_local_instance(cJSON *root);
   int get_meta_instance();
   int get_storage_instance();
   int get_computer_instance();

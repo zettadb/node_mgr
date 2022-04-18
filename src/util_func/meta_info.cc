@@ -44,6 +44,18 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "get_paths_space"_hash:
     type_enum = kGetPathsSpaceType;
     break;
+  case "install_storage"_hash:
+    type_enum = kInstallStorageType;
+    break;
+  case "install_computer"_hash:
+    type_enum = kInstallComputerType;
+    break;
+  case "delete_storage"_hash:
+    type_enum = kDeleteStorageType;
+    break;
+  case "delete_computer"_hash:
+    type_enum = kDeleteComputerType;
+    break;
 
   // addtional type convert should add above
   default:

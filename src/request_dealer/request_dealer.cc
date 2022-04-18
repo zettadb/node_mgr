@@ -4,6 +4,7 @@
 #include "zettalib/biodirectpopen.h"
 #include "zettalib/tool_func.h"
 #include "instance_info.h"
+#include "job.h"
 #include <algorithm>
 #include <vector>
 
@@ -33,6 +34,18 @@ bool RequestDealer::Deal() {
     break;
   case kunlun::kGetPathsSpaceType:
     ret = getPathsSpace();
+    break;
+  case kunlun::kInstallStorageType:
+    ret = installStorage();
+    break;
+  case kunlun::kInstallComputerType:
+    ret = installComputer();
+    break;
+  case kunlun::kDeleteStorageType:
+    ret = deleteStorage();
+    break;
+  case kunlun::kDeleteComputerType:
+    ret = deleteComputer();
     break;
 
   default:
@@ -191,8 +204,7 @@ RequestDealer::~RequestDealer() {
   }
 }
 
-bool RequestDealer::getPathsSpace()
-{
+bool RequestDealer::getPathsSpace() {
   Json::Value para_json = json_root_["paras"];
   std::vector<std::string> vec_paths;
 
@@ -202,5 +214,33 @@ bool RequestDealer::getPathsSpace()
   vec_paths.emplace_back(para_json["path3"].asString());
 
   deal_success_ = Instance_info::get_instance()->get_path_space(vec_paths, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::installStorage() {
+  Json::Value para_json = json_root_["paras"];
+
+  deal_success_ = Job::get_instance()->job_install_storage(para_json, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::installComputer() {
+  Json::Value para_json = json_root_["paras"];
+
+  deal_success_ = Job::get_instance()->job_install_computer(para_json, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::deleteStorage() {
+  Json::Value para_json = json_root_["paras"];
+
+  deal_success_ = Job::get_instance()->job_delete_storage(para_json, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::deleteComputer() {
+  Json::Value para_json = json_root_["paras"];
+
+  deal_success_ = Job::get_instance()->job_delete_computer(para_json, deal_info_);
   return deal_success_;
 }

@@ -8,9 +8,6 @@
 #include "sys.h"
 #include "config.h"
 #include "global.h"
-#include "hdfs_client.h"
-#include "http_client.h"
-#include "http_server.h"
 #include "instance_info.h"
 #include "job.h"
 #include "log.h"
@@ -33,18 +30,8 @@ std::string local_ip;
 std::string dev_interface;
 
 System::~System() {
-  //Http_server::get_instance()->do_exit = 1;
-  //Http_server::get_instance()->join_all();
-  //delete Http_server::get_instance();
-
-  //Job::get_instance()->do_exit = 1;
-  //Job::get_instance()->join_all();
-  //delete Job::get_instance();
-
-  // delete Hdfs_client::get_instance();
-  //delete Http_client::get_instance();
+  delete Job::get_instance();
   delete Instance_info::get_instance();
-
   delete Configs::get_instance();
   delete Logger::get_instance();
 
@@ -74,12 +61,8 @@ int System::create_instance(const std::string &cfg_path) {
     goto end;
   if ((ret = (Instance_info::get_instance() == NULL)) != 0)
     goto end;
-  //if ((ret = (Http_client::get_instance() == NULL)) != 0)
-  //  goto end;
-  //if ((ret = Job::get_instance()->start_job_thread()) != 0)
-  //  goto end;
-  //if ((ret = Http_server::get_instance()->start_http_thread()) != 0)
-  //  goto end;
+  if ((ret = (Job::get_instance() == NULL)) != 0)
+    goto end;
   if ((ret = regiest_to_meta()) == false)
     goto end;
 
@@ -152,6 +135,21 @@ bool System::regiest_to_meta() {
             "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
             "total_mem=16384,svc_since=current_timestamp(6);",
             local_ip.c_str(), node_mgr_brpc_http_port);
+    ret = mysql_conn.ExcuteQuery(sql, &result_set);
+    if (ret <= 0) {
+      syslog(Logger::ERROR,
+            "regiest current nodemanager to metadata db failed: %s",
+            mysql_conn.getErr());
+      return false;
+    }
+    sprintf(sql,
+            "insert into kunlun_metadata_db.server_nodes_stats "
+            "set id=(select id from kunlun_metadata_db.server_nodes where hostaddr='%s'),"
+            "comp_datadir_used=0,comp_datadir_avail=0,"
+            "datadir_used=0,datadir_avail=0,"
+            "wal_log_dir_used=0,wal_log_dir_avail=0,"
+            "log_dir_used=0,log_dir_avail=0,avg_network_usage_pct=0",
+            local_ip.c_str());
     ret = mysql_conn.ExcuteQuery(sql, &result_set);
     if (ret <= 0) {
       syslog(Logger::ERROR,

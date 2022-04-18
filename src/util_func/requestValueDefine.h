@@ -26,7 +26,11 @@ enum ClusterRequestTypes {
   kRequestTypeUndefined = 0,
   kExecuteCommandType,
   kGetPathsSpaceType,
-  
+  kInstallStorageType,
+  kInstallComputerType,
+  kDeleteStorageType,
+  kDeleteComputerType,
+
   // addtional type should add above
   kRequestTypeMax = 1000
 };

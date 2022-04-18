@@ -30,6 +30,10 @@ private:
   bool executeCommand();
   void constructCommand();
   bool getPathsSpace();
+  bool installStorage();
+  bool installComputer();
+  bool deleteStorage();
+  bool deleteComputer();
   std::string getStatusStr();
   std::string getInfo();
 
