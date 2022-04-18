@@ -55,19 +55,19 @@ http_upload_path = ./upload
 cluster_mgr_http_ip = 127.0.0.1
 
 # cluster_mgr http server port
-cluster_mgr_http_port = 57000
+cluster_mgr_http_port = 58000
 
 # node_mgr http server port
-node_mgr_http_port = 57001
+node_mgr_http_port = 58002
 
 # http cmd version
 http_cmd_version = 0.9
 
 # program_binaries_path
-program_binaries_path = ../../../program_binaries
+program_binaries_path = /home/kunlun/program_binaries
 
 # instance_binaries_path
-instance_binaries_path = ../../../instance_binaries
+instance_binaries_path = /home/kunlun/instance_binaries
 
 # storage_prog_package_name
 storage_prog_package_name = kunlun-storage-0.9.1
@@ -76,8 +76,8 @@ storage_prog_package_name = kunlun-storage-0.9.1
 computer_prog_package_name = kunlun-server-0.9.1
 
 # prometheus path
-prometheus_path = ../../../program_binaries/prometheus
+prometheus_path = /home/kunlun/program_binaries/prometheus
 
 # prometheus port start
-prometheus_port_start = 57010
+prometheus_port_start = 58010
 

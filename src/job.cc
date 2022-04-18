@@ -1975,7 +1975,7 @@ end:
 	return ret;
 }
 
-bool Job::job_control_computer(int port, int control)
+bool Job::job_control_computer(std::string &ip, int port, int control)
 {
 	bool ret = false;
 	FILE* pfd;
@@ -2015,6 +2015,7 @@ bool Job::job_control_computer(int port, int control)
 		for(int i=0; i<nodes; i++)
 		{
 			int port_sub;
+			std::string ip_sub;
 
 			item_sub = cJSON_GetArrayItem(root_file,i);
 			if(item_sub == NULL)
@@ -2023,6 +2024,14 @@ bool Job::job_control_computer(int port, int control)
 				goto end;
 			}
 			
+			item = cJSON_GetObjectItem(item_sub, "ip");
+			if(item == NULL)
+			{
+				syslog(Logger::ERROR, "get sub ip error");
+				goto end;
+			}
+			ip_sub = item->valuestring;
+
 			item = cJSON_GetObjectItem(item_sub, "port");
 			if(item == NULL)
 			{
@@ -2031,7 +2040,7 @@ bool Job::job_control_computer(int port, int control)
 			}
 			port_sub = item->valueint;
 
-			if(port_sub != port)
+			if(ip_sub != ip || port_sub != port)
 				continue;
 
 			//////////////////////////////
@@ -2243,12 +2252,12 @@ void Job::job_control_instance(cJSON *root)
 		if(control == "stop")
 		{
 			Instance_info::get_instance()->remove_storage_instance(ip, port);
-			ret = job_control_computer(port, 1);
+			ret = job_control_computer(ip, port, 1);
 		}
 		else if(control == "start")
-			ret = job_control_computer(port, 2);
+			ret = job_control_computer(ip, port, 2);
 		else if(control == "restart")
-			ret = job_control_computer(port, 3);
+			ret = job_control_computer(ip, port, 3);
 	}
 	else
 	{
@@ -2677,7 +2686,7 @@ void Job::job_install_computer(cJSON *root)
 	//////////////////////////////
 	//check exist instance and kill
 	if(access(instance_path.c_str(), F_OK) == 0)
-		job_control_computer(port, 1);
+		job_control_computer(ip, port, 1);
 
 	//////////////////////////////
 	//mkdir instance_path
@@ -2774,7 +2783,7 @@ start:
 	if(set_lib.size()>0 && retry-->0 && !Job::do_exit)
 	{
 		job_computer_add_lib(set_lib);
-		job_control_computer(port, 1);
+		job_control_computer(ip, port, 1);
 		goto start;
 	}
 

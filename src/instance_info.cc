@@ -637,7 +637,7 @@ void Instance_info::keepalive_instance()
 		{
 			syslog(Logger::ERROR, "computer_instance no alive, ip=%s, port=%d",instance->ip.c_str(),instance->port);
 			instance->pullup_wait = pullup_wait_const;
-			Job::get_instance()->job_control_computer(instance->port, 2);
+			Job::get_instance()->job_control_computer(instance->ip, instance->port, 2);
 		}
 	}
 }

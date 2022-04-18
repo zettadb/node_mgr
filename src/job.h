@@ -132,7 +132,7 @@ public:
 	bool job_read_file(std::string &path, std::string &str);
 	bool job_create_program_path();
 	bool job_control_storage(int port, int control);
-	bool job_control_computer(int port, int control);
+	bool job_control_computer(std::string &ip, int port, int control);
 	bool job_storage_add_lib(std::set<std::string> &set_lib);
 	bool job_computer_add_lib(std::set<std::string> &set_lib);
 
