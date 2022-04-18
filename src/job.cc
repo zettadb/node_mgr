@@ -45,16 +45,21 @@ Job::~Job() {}
 
 bool Job::job_system_cmd(std::string &cmd) {
   kunlun::BiodirectPopen *popen_p = new kunlun::BiodirectPopen(cmd.c_str());
+  FILE *stderr_fp;
+
   if (!popen_p->Launch("rw")) {
-    return false;
+    goto end;
   }
-  FILE *stderr_fp = popen_p->getReadStdErrFp();
-  char buffer[8192];
-  if (fgets(buffer, 8192, stderr_fp) != nullptr) {
-    syslog(Logger::ERROR, "Biopopen stderr: %s", buffer);
-    return false;
+  stderr_fp = popen_p->getReadStdErrFp();
+  char buf[256];
+  if (fgets(buf, 256, stderr_fp) != nullptr) {
+    syslog(Logger::ERROR, "Biopopen stderr: %s", buf);
+    goto end;
   }
-  delete popen_p;
+
+end:
+  if (popen_p != nullptr)
+    delete popen_p;
 
   return true;
 }
@@ -1001,6 +1006,7 @@ start:
 		set_lib.insert(std::string(p, q-p));
   }
   delete popen_p;
+  popen_p = nullptr;
 
   if (set_lib.size() > 0 && retry-- > 0) {
     job_storage_add_lib(set_lib);
@@ -1031,6 +1037,9 @@ start:
   return true;
 
 end:
+  if(popen_p != nullptr)
+    delete popen_p;
+
   syslog(Logger::INFO, "%s", job_info.c_str());
   return false;
 }
@@ -1159,6 +1168,7 @@ start:
 		set_lib.insert(std::string(p, q-p));
   }
   delete popen_p;
+  popen_p = nullptr;
 
   if (set_lib.size() > 0 && retry-- > 0) {
     job_computer_add_lib(set_lib);
@@ -1187,6 +1197,8 @@ start:
   return true;
 
 end:
+  if(popen_p != nullptr)
+    delete popen_p;
   syslog(Logger::ERROR, "%s", job_info.c_str());
   return false;
 }
