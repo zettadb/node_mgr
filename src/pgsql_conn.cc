@@ -23,6 +23,7 @@ int PGSQL_CONN::connect(const char *database, const char *ip, int port, const ch
 
 	if (PQstatus(conn) != CONNECTION_OK)
 	{
+		PQfinish(conn);
 		syslog(Logger::ERROR, "Connected to pgsql fail: %s", PQerrorMessage(conn));
 		return 1;
 	}
