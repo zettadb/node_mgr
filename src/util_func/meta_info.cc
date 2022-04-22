@@ -38,6 +38,9 @@ constexpr unsigned long long operator"" _hash(char const *p, size_t) {
 ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   ClusterRequestTypes type_enum = kRequestTypeUndefined;
   switch (hash_(type_str)) {
+  case "ping_pong"_hash:
+    type_enum = kPingPongType;
+    break;
   case "execute_command"_hash:
     type_enum = kExecuteCommandType;
     break;
@@ -55,6 +58,10 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
     break;
   case "delete_computer"_hash:
     type_enum = kDeleteComputerType;
+    break;
+
+  case "control_instance"_hash:
+    type_enum = kControlInstanceType;
     break;
 
   // addtional type convert should add above

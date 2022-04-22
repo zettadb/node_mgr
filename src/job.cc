@@ -370,105 +370,6 @@ bool Job::job_computer_add_lib(std::set<std::string> &set_lib) {
 }
 
 #if 0
-void Job::job_control_instance(cJSON *root) {
-  std::string job_id;
-  std::string job_result;
-  std::string job_info;
-
-  cJSON *item;
-  int port;
-  std::string ip, type, control;
-  bool ret;
-
-  item = cJSON_GetObjectItem(root, "job_id");
-  if (item == NULL || item->valuestring == NULL) {
-    syslog(Logger::ERROR, "get_job_id error");
-    return;
-  }
-  job_id = item->valuestring;
-
-  job_result = "busy";
-  job_info = "control instance start";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
-  item = cJSON_GetObjectItem(root, "control");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get control error";
-    goto end;
-  }
-  control = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "type");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get type error";
-    goto end;
-  }
-  type = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "ip");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get ip error";
-    goto end;
-  }
-  ip = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "port");
-  if (item == NULL) {
-    job_info = "get port error";
-    goto end;
-  }
-  port = item->valueint;
-
-  if (!check_local_ip(ip)) {
-    job_info = ip + " is not local ip";
-    goto end;
-  }
-
-  System::get_instance()->set_auto_pullup_working(false);
-
-  /////////////////////////////////////////////////////////////
-  if (type == "storage") {
-    if (control == "stop") {
-      Instance_info::get_instance()->remove_storage_instance(ip, port);
-      ret = job_control_storage(port, 1);
-    } else if (control == "start")
-      ret = job_control_storage(port, 2);
-    else if (control == "restart")
-      ret = job_control_storage(port, 3);
-  } else if (type == "computer") {
-    if (control == "stop") {
-      Instance_info::get_instance()->remove_storage_instance(ip, port);
-      ret = job_control_computer(ip, port, 1);
-    } else if (control == "start")
-      ret = job_control_computer(ip, port, 2);
-    else if (control == "restart")
-      ret = job_control_computer(ip, port, 3);
-  } else {
-    job_info = "type item error";
-    goto end;
-  }
-
-  if (!ret) {
-    job_info = "control instance error";
-    goto end;
-  }
-
-  job_result = "succeed";
-  job_info = "control instance succeed";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-  System::get_instance()->set_auto_pullup_working(true);
-  return;
-
-end:
-  job_result = "error";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::ERROR, "%s", job_info.c_str());
-  System::get_instance()->set_auto_pullup_working(true);
-}
-
-
 void Job::job_backup_shard(cJSON *root) {
   std::string job_id;
   std::string job_result;
@@ -859,6 +760,59 @@ end:
   syslog(Logger::ERROR, "%s", job_info.c_str());
 }
 #endif
+
+bool Job::job_control_instance(Json::Value &para, std::string &job_info) {
+  int port;
+  std::string ip, type, control;
+  bool ret;
+
+  type = para["type"].asString();
+  control = para["control"].asString();
+  ip = para["ip"].asString();
+  port = para["port"].asInt();
+
+  job_info = "control instance start";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+
+  System::get_instance()->set_auto_pullup_working(false);
+
+  /////////////////////////////////////////////////////////////
+  if (type == "storage") {
+    if (control == "stop") {
+      Instance_info::get_instance()->remove_storage_instance(ip, port);
+      ret = job_control_storage(port, 1);
+    } else if (control == "start")
+      ret = job_control_storage(port, 2);
+    else if (control == "restart")
+      ret = job_control_storage(port, 3);
+  } else if (type == "computer") {
+    if (control == "stop") {
+      Instance_info::get_instance()->remove_storage_instance(ip, port);
+      ret = job_control_computer(ip, port, 1);
+    } else if (control == "start")
+      ret = job_control_computer(ip, port, 2);
+    else if (control == "restart")
+      ret = job_control_computer(ip, port, 3);
+  } else {
+    job_info = "type item error";
+    goto end;
+  }
+
+  if (!ret) {
+    job_info = "control instance error";
+    goto end;
+  }
+
+  job_info = "control instance succeed";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+  System::get_instance()->set_auto_pullup_working(true);
+  return true;
+
+end:
+  syslog(Logger::ERROR, "%s", job_info.c_str());
+  System::get_instance()->set_auto_pullup_working(true);
+  return false;
+}
 
 bool Job::job_install_storage(Json::Value &para, std::string &job_info) {
 

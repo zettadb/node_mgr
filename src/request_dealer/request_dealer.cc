@@ -29,6 +29,9 @@ bool RequestDealer::Deal() {
 
   bool ret = false;
   switch (request_type_) {
+  case kunlun::kPingPongType:
+    ret = pingPong();
+    break;
   case kunlun::kExecuteCommandType:
     ret = executeCommand();
     break;
@@ -46,6 +49,9 @@ bool RequestDealer::Deal() {
     break;
   case kunlun::kDeleteComputerType:
     ret = deleteComputer();
+    break;
+  case kunlun::kControlInstanceType:
+    ret = controlInstance();
     break;
 
   default:
@@ -118,6 +124,13 @@ std::string RequestDealer::FetchResponse() {
   Json::FastWriter writer;
   writer.omitEndingLineFeed();
   return writer.write(root);
+}
+
+bool RequestDealer::pingPong(){
+  syslog(Logger::INFO, "ping pong");
+  deal_success_ = true;
+  deal_info_ = "success";
+  return deal_success_;
 }
 
 bool RequestDealer::executeCommand(){
@@ -242,5 +255,12 @@ bool RequestDealer::deleteComputer() {
   Json::Value para_json = json_root_["paras"];
 
   deal_success_ = Job::get_instance()->job_delete_computer(para_json, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::controlInstance(){
+  Json::Value para_json = json_root_["paras"];
+
+  deal_success_ = Job::get_instance()->job_control_instance(para_json, deal_info_);
   return deal_success_;
 }

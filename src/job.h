@@ -47,13 +47,12 @@ public:
   bool job_storage_add_lib(std::set<std::string> &set_lib);
   bool job_computer_add_lib(std::set<std::string> &set_lib);
 /*
-  void job_control_instance(cJSON *root);
-
   void job_backup_shard(cJSON *root);
   void job_restore_storage(cJSON *root);
   void job_restore_computer(cJSON *root);
   */
 
+ bool job_control_instance(Json::Value &para, std::string &job_info);
  bool job_install_storage(Json::Value &para, std::string &job_info);
  bool job_install_computer(Json::Value &para, std::string &job_info);
  bool job_delete_storage(Json::Value &para, std::string &job_info);

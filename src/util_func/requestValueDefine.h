@@ -24,12 +24,14 @@ enum RequestStatus {
 
 enum ClusterRequestTypes {
   kRequestTypeUndefined = 0,
+  kPingPongType,
   kExecuteCommandType,
   kGetPathsSpaceType,
   kInstallStorageType,
   kInstallComputerType,
   kDeleteStorageType,
   kDeleteComputerType,
+  kControlInstanceType,
 
   // addtional type should add above
   kRequestTypeMax = 1000

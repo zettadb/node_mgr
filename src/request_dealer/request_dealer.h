@@ -27,6 +27,7 @@ public:
 
 private:
   bool protocalValid();
+  bool pingPong();
   bool executeCommand();
   void constructCommand();
   bool getPathsSpace();
@@ -34,6 +35,7 @@ private:
   bool installComputer();
   bool deleteStorage();
   bool deleteComputer();
+  bool controlInstance();
   std::string getStatusStr();
   std::string getInfo();
 
