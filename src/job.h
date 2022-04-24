@@ -52,6 +52,7 @@ public:
   void job_restore_computer(cJSON *root);
   */
 
+ bool job_node_exporter(Json::Value &para, std::string &job_info);
  bool job_control_instance(Json::Value &para, std::string &job_info);
  bool job_install_storage(Json::Value &para, std::string &job_info);
  bool job_install_computer(Json::Value &para, std::string &job_info);

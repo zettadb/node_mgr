@@ -32,6 +32,7 @@ enum ClusterRequestTypes {
   kDeleteStorageType,
   kDeleteComputerType,
   kControlInstanceType,
+  kNodeExporterType,
 
   // addtional type should add above
   kRequestTypeMax = 1000

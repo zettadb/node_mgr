@@ -53,6 +53,9 @@ bool RequestDealer::Deal() {
   case kunlun::kControlInstanceType:
     ret = controlInstance();
     break;
+  case kunlun::kNodeExporterType:
+    ret = nodeExporter();
+    break;
 
   default:
     setErr("Unrecongnized job type");
@@ -262,5 +265,12 @@ bool RequestDealer::controlInstance(){
   Json::Value para_json = json_root_["paras"];
 
   deal_success_ = Job::get_instance()->job_control_instance(para_json, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::nodeExporter(){
+  Json::Value para_json = json_root_["paras"];
+
+  deal_success_ = Job::get_instance()->job_node_exporter(para_json, deal_info_);
   return deal_success_;
 }

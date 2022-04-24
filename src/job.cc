@@ -761,6 +761,69 @@ end:
 }
 #endif
 
+bool Job::job_node_exporter(Json::Value &para, std::string &job_info) {
+
+  FILE* pfd;
+	char buf[256];
+
+	std::string cmd, process_id;
+
+  job_info = "node exporter start";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+
+	/////////////////////////////////////////////////////////
+	// get process_id of node_exporter
+	cmd = "netstat -tnpl | grep tcp6 | grep " + std::to_string(prometheus_port_start+1);
+	syslog(Logger::INFO, "start_node_exporter cmd %s", cmd.c_str());
+
+	pfd = popen(cmd.c_str(), "r");
+	if(!pfd) {
+		syslog(Logger::ERROR, "get error %s", cmd.c_str());
+		goto end;
+	}
+	if(fgets(buf, 256, pfd)!=NULL) {
+		char *p, *q;
+		p = strstr(buf, "LISTEN");
+		if(p != NULL) {
+			p = strchr(p, 0x20);
+			if(p != NULL) {
+				while(*p == 0x20)
+					p++;
+
+				q = strchr(p, '/');
+
+				if(p != NULL)
+					process_id = std::string(p, q - p);
+			}
+		}
+	}
+	pclose(pfd);
+
+	/////////////////////////////////////////////////////////
+	// start prometheus
+	if(process_id.length() == 0) {
+		cmd = "cd " + prometheus_path + "/node_exporter;";
+		cmd += "./node_exporter --web.listen-address=:" + std::to_string(prometheus_port_start+1) + " &";
+		syslog(Logger::INFO, "job_restart_prometheus cmd %s", cmd.c_str());
+
+		pfd = popen(cmd.c_str(), "r");
+		if(!pfd) {
+			syslog(Logger::ERROR, "start error %s", cmd.c_str());
+			goto end;
+		}
+		pclose(pfd);
+	}
+
+  job_info = "node exporter succeed";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+  return true;
+
+end:
+  job_info = "node exporter failed";
+  syslog(Logger::ERROR, "%s", job_info.c_str());
+  return false;
+}
+
 bool Job::job_control_instance(Json::Value &para, std::string &job_info) {
   int port;
   std::string ip, type, control;
