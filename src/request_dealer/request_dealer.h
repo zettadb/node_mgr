@@ -36,6 +36,7 @@ private:
   bool deleteStorage();
   bool deleteComputer();
   bool controlInstance();
+  bool updateInstance();
   bool nodeExporter();
   std::string getStatusStr();
   std::string getInfo();

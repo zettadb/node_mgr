@@ -44,18 +44,16 @@ extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
 
+extern std::string meta_user;
+extern std::string meta_pwd;
+extern std::string meta_host;
+extern int64_t meta_port;
+
 Instance::Instance(Instance_type type_, std::string &ip_, int port_,
                    std::string &user_, std::string &pwd_)
-    : type(type_), ip(ip_), port(port_), user(user_), pwd(pwd_),
-      mysql_conn(NULL), pgsql_conn(NULL), pullup_wait(0) {}
+    : type(type_), ip(ip_), port(port_), user(user_), pwd(pwd_), pullup_wait(0) {}
 
 Instance::~Instance() {
-  if (mysql_conn != NULL) {
-    delete mysql_conn;
-  }
-  if (pgsql_conn != NULL) {
-    delete pgsql_conn;
-  }
 }
 
 Instance_info::Instance_info() {}
@@ -79,30 +77,168 @@ void Instance_info::get_local_instance() {
 }
 
 
-int Instance_info::get_meta_instance() {
+bool Instance_info::get_meta_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
+
+  kunlun::MysqlConnectionOption options;
+  options.autocommit = true;
+  options.ip = meta_host;
+  options.port_num = meta_port;
+  options.user = meta_user;
+  options.password = meta_pwd;
+
+  kunlun::MysqlConnection mysql_conn(options);
+  if (!mysql_conn.Connect()) {
+    syslog(Logger::ERROR, "connect to metadata db failed: %s",
+           mysql_conn.getErr());
+    return false;
+  }
+
+  kunlun::MysqlResult result_set;
+  char sql[2048] = {0};
+  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.meta_db_nodes");
+
+  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+  if (ret != 0) {
+    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+           mysql_conn.getErr());
+    return false;
+  }
+
+  for (auto &instance:vec_meta_instance)
+    delete instance;
+  vec_meta_instance.clear();
+  if (result_set.GetResultLinesNum() > 0) {
+    int lines = result_set.GetResultLinesNum();
+    for (int i = 0; i < lines; i++) {
+      std::string ip;
+      int port;
+      std::string user;
+      std::string pwd;
+
+      ip = result_set[i]["hostaddr"];
+      port = stoi(result_set[i]["port"]);
+      user = result_set[i]["user_name"];
+      pwd = result_set[i]["passwd"];
+
+      Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
+      vec_meta_instance.emplace_back(instance);
+    }
+  }
 
   syslog(Logger::INFO, "meta instance %d update", vec_meta_instance.size());
 
-  return 1;
+  return true;
 }
 
-int Instance_info::get_storage_instance() {
+bool Instance_info::get_storage_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
+
+  kunlun::MysqlConnectionOption options;
+  options.autocommit = true;
+  options.ip = meta_host;
+  options.port_num = meta_port;
+  options.user = meta_user;
+  options.password = meta_pwd;
+
+  kunlun::MysqlConnection mysql_conn(options);
+  if (!mysql_conn.Connect()) {
+    syslog(Logger::ERROR, "connect to metadata db failed: %s",
+           mysql_conn.getErr());
+    return false;
+  }
+
+  kunlun::MysqlResult result_set;
+  char sql[2048] = {0};
+  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.shard_nodes");
+
+  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+  if (ret != 0) {
+    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+           mysql_conn.getErr());
+    return false;
+  }
+
+  for (auto &instance:vec_storage_instance)
+    delete instance;
+  vec_storage_instance.clear();
+  if (result_set.GetResultLinesNum() > 0) {
+    int lines = result_set.GetResultLinesNum();
+    for (int i = 0; i < lines; i++) {
+      std::string ip;
+      int port;
+      std::string user;
+      std::string pwd;
+
+      ip = result_set[i]["hostaddr"];
+      port = stoi(result_set[i]["port"]);
+      user = result_set[i]["user_name"];
+      pwd = result_set[i]["passwd"];
+
+      Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
+      vec_storage_instance.emplace_back(instance);
+    }
+  }
 
   syslog(Logger::INFO, "storage instance %d update",
          vec_storage_instance.size());
 
-  return 1;
+  return true;
 }
 
-int Instance_info::get_computer_instance() {
+bool Instance_info::get_computer_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
+
+  kunlun::MysqlConnectionOption options;
+  options.autocommit = true;
+  options.ip = meta_host;
+  options.port_num = meta_port;
+  options.user = meta_user;
+  options.password = meta_pwd;
+
+  kunlun::MysqlConnection mysql_conn(options);
+  if (!mysql_conn.Connect()) {
+    syslog(Logger::ERROR, "connect to metadata db failed: %s",
+           mysql_conn.getErr());
+    return false;
+  }
+
+  kunlun::MysqlResult result_set;
+  char sql[2048] = {0};
+  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.comp_nodes");
+
+  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+  if (ret != 0) {
+    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+           mysql_conn.getErr());
+    return false;
+  }
+
+  for (auto &instance:vec_computer_instance)
+    delete instance;
+  vec_computer_instance.clear();
+  if (result_set.GetResultLinesNum() > 0) {
+    int lines = result_set.GetResultLinesNum();
+    for (int i = 0; i < lines; i++) {
+      std::string ip;
+      int port;
+      std::string user;
+      std::string pwd;
+
+      ip = result_set[i]["hostaddr"];
+      port = stoi(result_set[i]["port"]);
+      user = result_set[i]["user_name"];
+      pwd = result_set[i]["passwd"];
+
+      Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
+      vec_computer_instance.emplace_back(instance);
+    }
+  }
 
   syslog(Logger::INFO, "computer instance %d update",
          vec_computer_instance.size());
 
-  return 1;
+  return true;
 }
 
 void Instance_info::remove_storage_instance(std::string &ip, int port) {
@@ -111,10 +247,20 @@ void Instance_info::remove_storage_instance(std::string &ip, int port) {
   for (auto it = vec_storage_instance.begin(); it != vec_storage_instance.end();
        it++) {
     if ((*it)->ip == ip && (*it)->port == port) {
+      delete *it;
       vec_storage_instance.erase(it);
-      break;
+      return;
     }
   }
+
+	for(auto it = vec_meta_instance.begin(); it != vec_meta_instance.end(); 
+      it++)	{
+		if((*it)->ip == ip && (*it)->port == port) {
+			delete *it;
+			vec_meta_instance.erase(it);
+			return;
+		}
+	}
 }
 
 void Instance_info::remove_computer_instance(std::string &ip, int port) {
@@ -123,8 +269,9 @@ void Instance_info::remove_computer_instance(std::string &ip, int port) {
   for (auto it = vec_computer_instance.begin();
        it != vec_computer_instance.end(); it++) {
     if ((*it)->ip == ip && (*it)->port == port) {
+      delete *it;
       vec_computer_instance.erase(it);
-      break;
+      return;
     }
   }
 }
@@ -167,7 +314,7 @@ void Instance_info::set_auto_pullup(int seconds, int port) {
   }
 }
 
-bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
+bool Instance_info::get_mysql_alive(MYSQL_CONN &mysql_conn, std::string &ip,
                                     int port, std::string &user,
                                     std::string &psw) {
   // syslog(Logger::INFO, "get_mysql_alive ip=%s,port=%d,user=%s,psw=%s",
@@ -176,7 +323,7 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
   int retry = stmt_retries;
 
   while (retry--) {
-    if (mysql_conn->connect(NULL, ip.c_str(), port, user.c_str(),
+    if (mysql_conn.connect(NULL, ip.c_str(), port, user.c_str(),
                             psw.c_str())) {
       syslog(Logger::ERROR,
              "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", ip.c_str(),
@@ -184,11 +331,11 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
       continue;
     }
 
-    if (mysql_conn->send_stmt(SQLCOM_SELECT, "select version()"))
+    if (mysql_conn.send_stmt(SQLCOM_SELECT, "select version()"))
       continue;
 
     MYSQL_ROW row;
-    if ((row = mysql_fetch_row(mysql_conn->result))) {
+    if ((row = mysql_fetch_row(mysql_conn.result))) {
       // syslog(Logger::INFO, "row[]=%s",row[0]);
       if (strcasestr(row[0], "kunlun-storage"))
         break;
@@ -198,7 +345,7 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
 
     break;
   }
-  mysql_conn->free_mysql_result();
+  mysql_conn.free_mysql_result();
 
   if (retry < 0)
     return false;
@@ -206,7 +353,7 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
   return true;
 }
 
-bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
+bool Instance_info::get_pgsql_alive(PGSQL_CONN &pgsql_conn, std::string &ip,
                                     int port, std::string &user,
                                     std::string &psw) {
   // syslog(Logger::INFO, "get_pgsql_alive ip=%s,port=%d,user=%s,psw=%s",
@@ -215,7 +362,7 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
   int retry = stmt_retries;
 
   while (retry--) {
-    if (pgsql_conn->connect("postgres", ip.c_str(), port, user.c_str(),
+    if (pgsql_conn.connect("postgres", ip.c_str(), port, user.c_str(),
                             psw.c_str())) {
       syslog(Logger::ERROR,
              "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", ip.c_str(),
@@ -223,19 +370,19 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
       continue;
     }
 
-    if (pgsql_conn->send_stmt(PG_COPYRES_TUPLES, "select version()"))
+    if (pgsql_conn.send_stmt(PG_COPYRES_TUPLES, "select version()"))
       continue;
 
-    if (PQntuples(pgsql_conn->result) == 1) {
+    if (PQntuples(pgsql_conn.result) == 1) {
       // syslog(Logger::INFO, "presult = %s",
       // PQgetvalue(pgsql_conn.result,0,0));
-      if (strcasestr(PQgetvalue(pgsql_conn->result, 0, 0), "PostgreSQL"))
+      if (strcasestr(PQgetvalue(pgsql_conn.result, 0, 0), "PostgreSQL"))
         break;
     }
 
     break;
   }
-  pgsql_conn->free_pgsql_result();
+  pgsql_conn.free_pgsql_result();
 
   if (retry < 0)
     return false;
@@ -246,7 +393,6 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
 void Instance_info::keepalive_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  std::string install_path;
   /////////////////////////////////////////////////////////////
   // keep alive of meta
   for (auto &instance : vec_meta_instance) {

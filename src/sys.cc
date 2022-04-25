@@ -66,6 +66,7 @@ int System::create_instance(const std::string &cfg_path) {
   if ((ret = regiest_to_meta()) == false)
     goto end;
 
+  Instance_info::get_instance()->get_local_instance();
   return 0;
 
 end:

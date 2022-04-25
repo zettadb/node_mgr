@@ -1038,7 +1038,7 @@ start:
   pwd = "pgx_pwd";
   while (retry-- > 0) {
     sleep(1);
-    if (Instance_info::get_instance()->get_mysql_alive(&mysql_conn, ip, port,
+    if (Instance_info::get_instance()->get_mysql_alive(mysql_conn, ip, port,
                                                        user, pwd))
       break;
   }
@@ -1198,7 +1198,7 @@ start:
   retry = 6;
   while (retry-- > 0) {
     sleep(1);
-    if (Instance_info::get_instance()->get_pgsql_alive(&pgsql_conn, ip, port,
+    if (Instance_info::get_instance()->get_pgsql_alive(pgsql_conn, ip, port,
                                                        user, pwd))
       break;
   }

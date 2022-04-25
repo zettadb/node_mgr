@@ -63,6 +63,9 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "control_instance"_hash:
     type_enum = kControlInstanceType;
     break;
+  case "update_instance"_hash:
+    type_enum = kUpdateInstanceType;
+    break;
   case "node_exporter"_hash:
     type_enum = kNodeExporterType;
     break;
