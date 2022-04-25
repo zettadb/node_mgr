@@ -425,6 +425,7 @@ void Instance_info::remove_storage_instance(std::string &ip, int port)
 	{
 		if((*it)->ip == ip && (*it)->port == port)
 		{
+			delete *it;
 			vec_storage_instance.erase(it);
 			return;
 		}
@@ -434,6 +435,7 @@ void Instance_info::remove_storage_instance(std::string &ip, int port)
 	{
 		if((*it)->ip == ip && (*it)->port == port)
 		{
+			delete *it;
 			vec_meta_instance.erase(it);
 			return;
 		}
@@ -448,6 +450,7 @@ void Instance_info::remove_computer_instance(std::string &ip, int port)
 	{
 		if((*it)->ip == ip && (*it)->port == port)
 		{
+			delete *it;
 			vec_computer_instance.erase(it);
 			return;
 		}
