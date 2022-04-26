@@ -50,6 +50,9 @@ bool RequestDealer::Deal() {
   case kunlun::kDeleteComputerType:
     ret = deleteComputer();
     break;
+  case kunlun::kBackupShardType:
+    ret = backupShard();
+    break;
   case kunlun::kControlInstanceType:
     ret = controlInstance();
     break;
@@ -238,35 +241,36 @@ bool RequestDealer::getPathsSpace() {
 
 bool RequestDealer::installStorage() {
   Json::Value para_json = json_root_["paras"];
-
   deal_success_ = Job::get_instance()->job_install_storage(para_json, deal_info_);
   return deal_success_;
 }
 
 bool RequestDealer::installComputer() {
   Json::Value para_json = json_root_["paras"];
-
   deal_success_ = Job::get_instance()->job_install_computer(para_json, deal_info_);
   return deal_success_;
 }
 
 bool RequestDealer::deleteStorage() {
   Json::Value para_json = json_root_["paras"];
-
   deal_success_ = Job::get_instance()->job_delete_storage(para_json, deal_info_);
   return deal_success_;
 }
 
 bool RequestDealer::deleteComputer() {
   Json::Value para_json = json_root_["paras"];
-
   deal_success_ = Job::get_instance()->job_delete_computer(para_json, deal_info_);
+  return deal_success_;
+}
+
+bool RequestDealer::backupShard() {
+  Json::Value para_json = json_root_["paras"];
+  deal_success_ = Job::get_instance()->job_backup_shard(para_json, deal_info_);
   return deal_success_;
 }
 
 bool RequestDealer::controlInstance(){
   Json::Value para_json = json_root_["paras"];
-
   deal_success_ = Job::get_instance()->job_control_instance(para_json, deal_info_);
   return deal_success_;
 }
@@ -274,28 +278,19 @@ bool RequestDealer::controlInstance(){
 bool RequestDealer::updateInstance() {
   Json::Value para_json = json_root_["paras"];
 
-  deal_success_ = true;
-  if (!para_json.isMember("instance_type")) {
-		Instance_info::get_instance()->get_meta_instance();
-		Instance_info::get_instance()->get_storage_instance();
-		Instance_info::get_instance()->get_computer_instance();
-    return deal_success_;
-  }
-
   std::string instance_type = para_json["instance_type"].asString();
   if(instance_type == "meta_instance")
-    Instance_info::get_instance()->get_meta_instance();
+    deal_success_ = Instance_info::get_instance()->get_meta_instance();
   else if(instance_type == "storage_instance")
-    Instance_info::get_instance()->get_storage_instance();
+    deal_success_ = Instance_info::get_instance()->get_storage_instance();
   else if(instance_type == "computer_instance")
-    Instance_info::get_instance()->get_computer_instance();
+    deal_success_ = Instance_info::get_instance()->get_computer_instance();
 
   return deal_success_;
 }
 
 bool RequestDealer::nodeExporter(){
   Json::Value para_json = json_root_["paras"];
-
   deal_success_ = Job::get_instance()->job_node_exporter(para_json, deal_info_);
   return deal_success_;
 }

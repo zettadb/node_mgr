@@ -370,132 +370,6 @@ bool Job::job_computer_add_lib(std::set<std::string> &set_lib) {
 }
 
 #if 0
-void Job::job_backup_shard(cJSON *root) {
-  std::string job_id;
-  std::string job_result;
-  std::string job_info;
-  cJSON *item;
-
-  FILE *pfd;
-  char buf[512];
-
-  std::string cmd, cluster_name, shard_name, backup_storage;
-  int port;
-  std::string ip;
-
-  item = cJSON_GetObjectItem(root, "job_id");
-  if (item == NULL || item->valuestring == NULL) {
-    syslog(Logger::ERROR, "get_job_id error");
-    return;
-  }
-  job_id = item->valuestring;
-
-  job_result = "busy";
-  job_info = "backup shard start";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
-  item = cJSON_GetObjectItem(root, "ip");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get ip error";
-    goto end;
-  }
-  ip = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "port");
-  if (item == NULL) {
-    job_info = "get port error";
-    goto end;
-  }
-  port = item->valueint;
-
-  if (!check_local_ip(ip)) {
-    job_info = ip + " is not local ip";
-    goto end;
-  }
-
-  item = cJSON_GetObjectItem(root, "cluster_name");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get cluster_name error";
-    goto end;
-  }
-  cluster_name = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "shard_name");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get shard_name error";
-    goto end;
-  }
-  shard_name = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "backup_storage");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get backup_storage error";
-    goto end;
-  }
-  backup_storage = item->valuestring;
-
-  job_info = "backup shard wroking";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
-  ////////////////////////////////////////////////////////
-  // start backup path
-  cmd = "backup -backuptype=storage -port=" + std::to_string(port) +
-        " -clustername=" + cluster_name + " -shardname=" + shard_name;
-  cmd += " -HdfsNameNodeService=" + backup_storage;
-  syslog(Logger::INFO, "job_backup_shard cmd %s", cmd.c_str());
-
-  pfd = popen(cmd.c_str(), "r");
-  if (!pfd) {
-    job_info = "backup error " + cmd;
-    goto end;
-  }
-  while (fgets(buf, 512, pfd) != NULL) {
-    // if(strcasestr(buf, "error") != NULL)
-    syslog(Logger::INFO, "%s", buf);
-  }
-  pclose(pfd);
-
-  ////////////////////////////////////////////////////////
-  // check error, must be contain cluster_name & shard_name, and the tail like
-  // ".tgz\n\0"
-  if (strstr(buf, cluster_name.c_str()) == NULL ||
-      strstr(buf, shard_name.c_str()) == NULL) {
-    syslog(Logger::ERROR, "backup error: %s", buf);
-    job_info = "backup cmd return error";
-    goto end;
-  } else {
-    char *p = strstr(buf, ".tgz");
-    if (p == NULL || *(p + 4) != '\n' || *(p + 5) != '\0') {
-      syslog(Logger::ERROR, "backup error: %s", buf);
-      job_info = "backup cmd return error";
-      goto end;
-    }
-
-    job_info = buf;
-  }
-
-  ////////////////////////////////////////////////////////
-  // rm backup path
-  cmd = "rm -rf ./data";
-  if (!job_system_cmd(cmd)) {
-    job_info = "job_system_cmd error";
-    goto end;
-  }
-
-  job_result = "succeed";
-  // job_info = "backup succeed"; //for shard_backup_path
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-  return;
-
-end:
-  job_result = "error";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::ERROR, "%s", job_info.c_str());
-}
-
 void Job::job_restore_storage(cJSON *root) {
   std::string job_id;
   std::string job_result;
@@ -1439,5 +1313,80 @@ bool Job::job_delete_computer(Json::Value &para, std::string &job_info) {
 end:
   syslog(Logger::ERROR, "%s", job_info.c_str());
   System::get_instance()->set_auto_pullup_working(true);
+  return false;
+}
+
+bool Job::job_backup_shard(Json::Value &para, std::string &job_info) {
+
+  FILE *pfd;
+  char buf[512];
+
+  std::string cmd, cluster_name, shard_name, backup_storage;
+  int port;
+  std::string ip;
+
+  job_info = "backup shard start";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+
+  ip = para["ip"].asString();
+  port = para["port"].asInt();
+  cluster_name = para["cluster_name"].asString();
+  shard_name = para["shard_name"].asString();
+  backup_storage = para["backup_storage"].asString();
+
+  job_info = "backup shard wroking";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+
+  ////////////////////////////////////////////////////////
+  // start backup path
+  cmd = "backup -backuptype=storage -port=" + std::to_string(port) +
+        " -clustername=" + cluster_name + " -shardname=" + shard_name;
+  cmd += " -HdfsNameNodeService=" + backup_storage;
+  syslog(Logger::INFO, "job_backup_shard cmd %s", cmd.c_str());
+
+  pfd = popen(cmd.c_str(), "r");
+  if (!pfd) {
+    job_info = "backup error " + cmd;
+    goto end;
+  }
+  while (fgets(buf, 512, pfd) != NULL) {
+    // if(strcasestr(buf, "error") != NULL)
+    syslog(Logger::INFO, "%s", buf);
+  }
+  pclose(pfd);
+
+  ////////////////////////////////////////////////////////
+  // check error, must be contain cluster_name & shard_name, and the tail like
+  // ".tgz\n\0"
+  if (strstr(buf, cluster_name.c_str()) == NULL ||
+      strstr(buf, shard_name.c_str()) == NULL) {
+    syslog(Logger::ERROR, "backup error: %s", buf);
+    job_info = "backup cmd return error";
+    goto end;
+  } else {
+    char *p = strstr(buf, ".tgz");
+    if (p == NULL || *(p + 4) != '\n' || *(p + 5) != '\0') {
+      syslog(Logger::ERROR, "backup error: %s", buf);
+      job_info = "backup cmd return error";
+      goto end;
+    }
+
+    job_info = buf;
+  }
+
+  ////////////////////////////////////////////////////////
+  // rm backup path
+  cmd = "rm -rf ./data";
+  if (!job_system_cmd(cmd)) {
+    job_info = "job_system_cmd error";
+    goto end;
+  }
+
+  // job_info = "backup succeed"; //for shard_backup_path
+  syslog(Logger::INFO, "backup succeed");
+  return true;
+
+end:
+  syslog(Logger::ERROR, "%s", job_info.c_str());
   return false;
 }

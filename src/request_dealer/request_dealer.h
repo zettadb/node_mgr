@@ -35,6 +35,7 @@ private:
   bool installComputer();
   bool deleteStorage();
   bool deleteComputer();
+  bool backupShard();
   bool controlInstance();
   bool updateInstance();
   bool nodeExporter();

@@ -31,6 +31,7 @@ enum ClusterRequestTypes {
   kInstallComputerType,
   kDeleteStorageType,
   kDeleteComputerType,
+  kBackupShardType,
   kControlInstanceType,
   kUpdateInstanceType,
   kNodeExporterType,
