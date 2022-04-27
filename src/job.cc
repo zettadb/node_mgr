@@ -369,272 +369,6 @@ bool Job::job_computer_add_lib(std::set<std::string> &set_lib) {
   return true;
 }
 
-#if 0
-void Job::job_restore_storage(cJSON *root) {
-  std::string job_id;
-  std::string job_result;
-  std::string job_info;
-  cJSON *item;
-
-  FILE *pfd;
-  char buf[512];
-
-  std::string cmd, cluster_name, shard_name, timestamp, backup_storage;
-  std::string ip, user, pwd;
-  MYSQL_CONN mysql_conn;
-  int port;
-  int retry;
-
-  item = cJSON_GetObjectItem(root, "job_id");
-  if (item == NULL || item->valuestring == NULL) {
-    syslog(Logger::ERROR, "get_job_id error");
-    return;
-  }
-  job_id = item->valuestring;
-
-  job_result = "busy";
-  job_info = "restore storage start";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-  System::get_instance()->set_auto_pullup_working(false);
-
-  item = cJSON_GetObjectItem(root, "ip");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get ip error";
-    goto end;
-  }
-  ip = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "port");
-  if (item == NULL) {
-    job_info = "get port error";
-    goto end;
-  }
-  port = item->valueint;
-
-  if (!check_local_ip(ip)) {
-    job_info = ip + " is not local ip";
-    goto end;
-  }
-
-  item = cJSON_GetObjectItem(root, "cluster_name");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get cluster_name error";
-    goto end;
-  }
-  cluster_name = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "shard_name");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get shard_name error";
-    goto end;
-  }
-  shard_name = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "timestamp");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get timestamp error";
-    goto end;
-  }
-  timestamp = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "backup_storage");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get backup_storage error";
-    goto end;
-  }
-  backup_storage = item->valuestring;
-
-  job_info = "restore storage wroking";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
-  ////////////////////////////////////////////////////////
-  // start backup path
-  cmd = "restore -port=" + std::to_string(port) +
-        " -origclustername=" + cluster_name + " -origshardname=" + shard_name;
-  cmd += " -restoretime='" + timestamp +
-         "' -HdfsNameNodeService=" + backup_storage;
-  syslog(Logger::INFO, "job_restore_storage cmd %s", cmd.c_str());
-
-  pfd = popen(cmd.c_str(), "r");
-  if (!pfd) {
-    job_info = "restore error " + cmd;
-    goto end;
-  }
-  while (fgets(buf, 512, pfd) != NULL) {
-    // if(strcasestr(buf, "error") != NULL)
-    syslog(Logger::INFO, "%s", buf);
-  }
-  pclose(pfd);
-
-  ////////////////////////////////////////////////////////
-  // check error
-  if (strstr(buf, "restore MySQL instance successfully") == NULL) {
-    syslog(Logger::ERROR, "restore storage error: %s", buf);
-    job_info = "restore cmd return error";
-    goto end;
-  }
-
-  ////////////////////////////////////////////////////////
-  // rm restore path
-  cmd = "rm -rf ./data";
-  if (!job_system_cmd(cmd)) {
-    job_info = "job_system_cmd error";
-    goto end;
-  }
-
-  /////////////////////////////////////////////////////////////
-  // check instance succeed by connect to instance
-  retry = 6;
-  user = "pgx";
-  pwd = "pgx_pwd";
-  while (retry-- > 0 && !Job::do_exit) {
-    sleep(1);
-    if (Instance_info::get_instance()->get_mysql_alive(&mysql_conn, ip, port,
-                                                       user, pwd))
-      break;
-  }
-  mysql_conn.close_conn();
-
-  if (retry < 0) {
-    job_info = "connect storage instance error";
-    goto end;
-  }
-
-  job_result = "succeed";
-  job_info = "restore storage succeed";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-  System::get_instance()->set_auto_pullup_working(true);
-  return;
-
-end:
-  job_result = "error";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::ERROR, "%s", job_info.c_str());
-  System::get_instance()->set_auto_pullup_working(true);
-}
-
-void Job::job_restore_computer(cJSON *root) {
-  std::string job_id;
-  std::string job_result;
-  std::string job_info;
-  cJSON *item;
-
-  FILE *pfd;
-  char buf[512];
-
-  std::string cmd, strtmp, cluster_name, meta_str, shard_map;
-  std::string ip;
-  int port;
-  int retry;
-
-  item = cJSON_GetObjectItem(root, "job_id");
-  if (item == NULL || item->valuestring == NULL) {
-    syslog(Logger::ERROR, "get_job_id error");
-    return;
-  }
-  job_id = item->valuestring;
-
-  job_result = "busy";
-  job_info = "restore computer start";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
-  item = cJSON_GetObjectItem(root, "ip");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get ip error";
-    goto end;
-  }
-  ip = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "port");
-  if (item == NULL) {
-    job_info = "get port error";
-    goto end;
-  }
-  port = item->valueint;
-
-  if (!check_local_ip(ip)) {
-    job_info = ip + " is not local ip";
-    goto end;
-  }
-
-  item = cJSON_GetObjectItem(root, "cluster_name");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get cluster_name error";
-    goto end;
-  }
-  cluster_name = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "meta_str");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get meta_str error";
-    goto end;
-  }
-  meta_str = item->valuestring;
-
-  item = cJSON_GetObjectItem(root, "shard_map");
-  if (item == NULL || item->valuestring == NULL) {
-    job_info = "get shard_map error";
-    goto end;
-  }
-  shard_map = item->valuestring;
-
-  job_info = "restore computer wroking";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
-  ////////////////////////////////////////////////////////
-  // restore meta to computer
-  cmd = "restore -restoretype=compute -workdir=./data -port=" +
-        std::to_string(port) + " -origclustername=" + cluster_name;
-  cmd += " -origmetaclusterconnstr=" + meta_str +
-         " -metaclusterconnstr=" + meta_str + " -shard_map=" + shard_map;
-  syslog(Logger::INFO, "job_restore_computer cmd %s", cmd.c_str());
-
-  pfd = popen(cmd.c_str(), "r");
-  if (!pfd) {
-    job_info = "restore error " + cmd;
-    goto end;
-  }
-  while (fgets(buf, 512, pfd) != NULL) {
-    // if(strcasestr(buf, "error") != NULL)
-    syslog(Logger::INFO, "%s", buf);
-  }
-  pclose(pfd);
-
-  ////////////////////////////////////////////////////////
-  // check error
-  if (strstr(buf, "restore Compute successfully") == NULL) {
-    syslog(Logger::ERROR, "restore computer error: %s", buf);
-    job_info = "restore cmd return error";
-    goto end;
-  }
-
-  ////////////////////////////////////////////////////////
-  // rm restore path
-  cmd = "rm -rf ./data";
-  // if(!job_system_cmd(cmd))
-  {
-    //	job_info = "job_system_cmd error";
-    //	goto end;
-  }
-
-  job_result = "succeed";
-  job_info = "restore compouter succeed";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::INFO, "%s", job_info.c_str());
-  return;
-
-end:
-  job_result = "error";
-  update_jobid_status(job_id, job_result, job_info);
-  syslog(Logger::ERROR, "%s", job_info.c_str());
-}
-#endif
-
 bool Job::job_node_exporter(Json::Value &para, std::string &job_info) {
 
   FILE* pfd;
@@ -1334,9 +1068,6 @@ bool Job::job_backup_shard(Json::Value &para, std::string &job_info) {
   shard_name = para["shard_name"].asString();
   backup_storage = para["backup_storage"].asString();
 
-  job_info = "backup shard wroking";
-  syslog(Logger::INFO, "%s", job_info.c_str());
-
   ////////////////////////////////////////////////////////
   // start backup path
   cmd = "backup -backuptype=storage -port=" + std::to_string(port) +
@@ -1384,6 +1115,156 @@ bool Job::job_backup_shard(Json::Value &para, std::string &job_info) {
 
   // job_info = "backup succeed"; //for shard_backup_path
   syslog(Logger::INFO, "backup succeed");
+  return true;
+
+end:
+  syslog(Logger::ERROR, "%s", job_info.c_str());
+  return false;
+}
+
+bool Job::job_restore_storage(Json::Value &para, std::string &job_info) {
+
+  FILE *pfd;
+  char buf[512];
+
+  std::string cmd, cluster_name, shard_name, timestamp, backup_storage;
+  std::string ip, user, pwd;
+  MYSQL_CONN mysql_conn;
+  int port;
+  int retry;
+
+  job_info = "restore storage start";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+  System::get_instance()->set_auto_pullup_working(false);
+
+  ip = para["ip"].asString();
+  port = para["port"].asInt();
+  cluster_name = para["cluster_name"].asString();
+  shard_name = para["shard_name"].asString();
+  timestamp = para["timestamp"].asString();
+  backup_storage = para["backup_storage"].asString();
+
+  ////////////////////////////////////////////////////////
+  // start backup path
+  cmd = "restore -port=" + std::to_string(port) +
+        " -origclustername=" + cluster_name + " -origshardname=" + shard_name;
+  cmd += " -restoretime='" + timestamp +
+         "' -HdfsNameNodeService=" + backup_storage;
+  syslog(Logger::INFO, "job_restore_storage cmd %s", cmd.c_str());
+
+  pfd = popen(cmd.c_str(), "r");
+  if (!pfd) {
+    job_info = "restore error " + cmd;
+    goto end;
+  }
+  while (fgets(buf, 512, pfd) != NULL) {
+    // if(strcasestr(buf, "error") != NULL)
+    syslog(Logger::INFO, "%s", buf);
+  }
+  pclose(pfd);
+
+  ////////////////////////////////////////////////////////
+  // check error
+  if (strstr(buf, "restore MySQL instance successfully") == NULL) {
+    syslog(Logger::ERROR, "restore storage error: %s", buf);
+    job_info = "restore cmd return error";
+    goto end;
+  }
+
+  ////////////////////////////////////////////////////////
+  // rm restore path
+  cmd = "rm -rf ./data";
+  if (!job_system_cmd(cmd)) {
+    job_info = "job_system_cmd error";
+    goto end;
+  }
+
+  /////////////////////////////////////////////////////////////
+  // check instance succeed by connect to instance
+  retry = 6;
+  user = "pgx";
+  pwd = "pgx_pwd";
+  while (retry-- > 0) {
+    sleep(1);
+    if (Instance_info::get_instance()->get_mysql_alive(mysql_conn, ip, port,
+                                                       user, pwd))
+      break;
+  }
+  mysql_conn.close_conn();
+
+  if (retry < 0) {
+    job_info = "connect storage instance error";
+    goto end;
+  }
+
+  job_info = "restore storage succeed";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+  System::get_instance()->set_auto_pullup_working(true);
+  return true;
+
+end:
+  syslog(Logger::ERROR, "%s", job_info.c_str());
+  System::get_instance()->set_auto_pullup_working(true);
+  return false;
+}
+
+bool Job::job_restore_computer(Json::Value &para, std::string &job_info) {
+
+  FILE *pfd;
+  char buf[512];
+
+  std::string cmd, strtmp, cluster_name, meta_str, shard_map;
+  std::string ip;
+  int port;
+  int retry;
+
+  job_info = "restore computer start";
+  syslog(Logger::INFO, "%s", job_info.c_str());
+
+  ip = para["ip"].asString();
+  port = para["port"].asInt();
+  cluster_name = para["cluster_name"].asString();
+  meta_str = para["meta_str"].asString();
+  shard_map = para["shard_map"].asString();
+
+  ////////////////////////////////////////////////////////
+  // restore meta to computer
+  cmd = "restore -restoretype=compute -workdir=./data -port=" +
+        std::to_string(port) + " -origclustername=" + cluster_name;
+  cmd += " -origmetaclusterconnstr=" + meta_str +
+         " -metaclusterconnstr=" + meta_str + " -shard_map=\"" + shard_map + "\"";
+  syslog(Logger::INFO, "job_restore_computer cmd %s", cmd.c_str());
+
+  pfd = popen(cmd.c_str(), "r");
+  if (!pfd) {
+    job_info = "restore error " + cmd;
+    goto end;
+  }
+  while (fgets(buf, 512, pfd) != NULL) {
+    // if(strcasestr(buf, "error") != NULL)
+    syslog(Logger::INFO, "%s", buf);
+  }
+  pclose(pfd);
+
+  ////////////////////////////////////////////////////////
+  // check error
+  if (strstr(buf, "restore Compute successfully") == NULL) {
+    syslog(Logger::ERROR, "restore computer error: %s", buf);
+    job_info = "restore cmd return error";
+    goto end;
+  }
+
+  ////////////////////////////////////////////////////////
+  // rm restore path
+  cmd = "rm -rf ./data";
+  // if(!job_system_cmd(cmd))
+  {
+    //	job_info = "job_system_cmd error";
+    //	goto end;
+  }
+
+  job_info = "restore compouter succeed";
+  syslog(Logger::INFO, "%s", job_info.c_str());
   return true;
 
 end:

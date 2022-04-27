@@ -46,18 +46,15 @@ public:
   bool job_control_computer(std::string &ip, int port, int control);
   bool job_storage_add_lib(std::set<std::string> &set_lib);
   bool job_computer_add_lib(std::set<std::string> &set_lib);
-/*
-  void job_restore_storage(cJSON *root);
-  void job_restore_computer(cJSON *root);
-  */
-
- bool job_node_exporter(Json::Value &para, std::string &job_info);
- bool job_control_instance(Json::Value &para, std::string &job_info);
- bool job_install_storage(Json::Value &para, std::string &job_info);
- bool job_install_computer(Json::Value &para, std::string &job_info);
- bool job_delete_storage(Json::Value &para, std::string &job_info);
- bool job_delete_computer(Json::Value &para, std::string &job_info);
- bool job_backup_shard(Json::Value &para, std::string &job_info);
+  bool job_node_exporter(Json::Value &para, std::string &job_info);
+  bool job_control_instance(Json::Value &para, std::string &job_info);
+  bool job_install_storage(Json::Value &para, std::string &job_info);
+  bool job_install_computer(Json::Value &para, std::string &job_info);
+  bool job_delete_storage(Json::Value &para, std::string &job_info);
+  bool job_delete_computer(Json::Value &para, std::string &job_info);
+  bool job_backup_shard(Json::Value &para, std::string &job_info);
+  bool job_restore_storage(Json::Value &para, std::string &job_info);
+  bool job_restore_computer(Json::Value &para, std::string &job_info);
 };
 
 #endif // !JOB_H
