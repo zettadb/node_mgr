@@ -6,13 +6,12 @@
 */
 
 #include "instance_info.h"
-#include "cjson.h"
 #include "global.h"
-#include "http_client.h"
 #include "job.h"
 #include "log.h"
 #include "mysql_conn.h"
 #include "pgsql_conn.h"
+#include "json/json.h"
 #include "sys.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -45,18 +44,16 @@ extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
 
+extern std::string meta_svr_user;
+extern std::string meta_svr_pwd;
+extern std::string meta_svr_ip;
+extern int64_t meta_svr_port;
+
 Instance::Instance(Instance_type type_, std::string &ip_, int port_,
                    std::string &user_, std::string &pwd_)
-    : type(type_), ip(ip_), port(port_), user(user_), pwd(pwd_),
-      mysql_conn(NULL), pgsql_conn(NULL), pullup_wait(0) {}
+    : type(type_), ip(ip_), port(port_), user(user_), pwd(pwd_), pullup_wait(0) {}
 
 Instance::~Instance() {
-  if (mysql_conn != NULL) {
-    delete mysql_conn;
-  }
-  if (pgsql_conn != NULL) {
-    delete pgsql_conn;
-  }
 }
 
 Instance_info::Instance_info() {}
@@ -79,320 +76,169 @@ void Instance_info::get_local_instance() {
   get_computer_instance();
 }
 
-void Instance_info::get_local_instance(cJSON *root) {
-  cJSON *item;
 
-  item = cJSON_GetObjectItem(root, "instance_type");
-  if (item == NULL) {
-    get_meta_instance();
-    get_storage_instance();
-    get_computer_instance();
-    return;
-  }
-
-  if (strcmp(item->valuestring, "meta_instance") == 0)
-    get_meta_instance();
-  else if (strcmp(item->valuestring, "storage_instance") == 0)
-    get_storage_instance();
-  else if (strcmp(item->valuestring, "computer_instance") == 0)
-    get_computer_instance();
-  else
-    syslog(Logger::ERROR, "instance_type error %s", item->valuestring);
-}
-
-int Instance_info::get_meta_instance() {
+bool Instance_info::get_meta_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  cJSON *root;
-  cJSON *item;
-  cJSON *sub_item;
-  char *cjson;
-  int retry = 3;
-  cJSON *ret_root;
+  kunlun::MysqlConnectionOption options;
+  options.autocommit = true;
+  options.ip = meta_svr_ip;
+  options.port_num = meta_svr_port;
+  options.user = meta_svr_user;
+  options.password = meta_svr_pwd;
 
-  root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "job_type", "get_instance");
-  cJSON_AddStringToObject(root, "instance_type", "meta_instance");
-  int ip_count = 0;
-  for (auto &local_ip : Job::get_instance()->vec_local_ip) {
-    std::string node_ip = "node_ip" + std::to_string(ip_count++);
-    cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
+  kunlun::MysqlConnection mysql_conn(options);
+  if (!mysql_conn.Connect()) {
+    syslog(Logger::ERROR, "connect to metadata db failed: %s",
+           mysql_conn.getErr());
+    return false;
   }
 
-  cjson = cJSON_Print(root);
-  cJSON_Delete(root);
+  kunlun::MysqlResult result_set;
+  char sql[2048] = {0};
+  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.meta_db_nodes");
 
-  std::string post_url = "http://" + cluster_mgr_http_ip + ":" +
-                         std::to_string(cluster_mgr_http_port);
-
-  std::string result_str;
-  while (retry-- > 0 && !Job::do_exit) {
-    if (Http_client::get_instance()->Http_client_post_para(
-            post_url.c_str(), cjson, result_str) == 0)
-      break;
-  }
-  free(cjson);
-
-  if (retry < 0) {
-    syslog(Logger::ERROR, "get_meta_instance fail because http post");
-    return 0;
+  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+  if (ret != 0) {
+    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+           mysql_conn.getErr());
+    return false;
   }
 
-  // syslog(Logger::INFO, "result_str meta=%s", result_str.c_str());
-  ret_root = cJSON_Parse(result_str.c_str());
-  if (ret_root == NULL)
-    return 0;
-
-  for (auto &instance : vec_meta_instance)
+  for (auto &instance:vec_meta_instance)
     delete instance;
   vec_meta_instance.clear();
+  if (result_set.GetResultLinesNum() > 0) {
+    int lines = result_set.GetResultLinesNum();
+    for (int i = 0; i < lines; i++) {
+      std::string ip;
+      int port;
+      std::string user;
+      std::string pwd;
 
-  int node_count = 0;
-  while (true) {
-    std::string node_str = "meta_instance" + std::to_string(node_count++);
-    item = cJSON_GetObjectItem(ret_root, node_str.c_str());
-    if (item == NULL)
-      break;
+      ip = result_set[i]["hostaddr"];
+      port = stoi(result_set[i]["port"]);
+      user = result_set[i]["user_name"];
+      pwd = result_set[i]["passwd"];
 
-    std::string ip;
-    int port;
-    std::string user;
-    std::string pwd;
-
-    sub_item = cJSON_GetObjectItem(item, "ip");
-    if (sub_item == NULL)
-      break;
-    ip = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "port");
-    if (sub_item == NULL)
-      break;
-    port = sub_item->valueint;
-
-    sub_item = cJSON_GetObjectItem(item, "user");
-    if (sub_item == NULL)
-      break;
-    user = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "pwd");
-    if (sub_item == NULL)
-      break;
-    pwd = sub_item->valuestring;
-
-    Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
-    vec_meta_instance.emplace_back(instance);
-
-    MYSQL_CONN *conn = new MYSQL_CONN();
-    instance->mysql_conn = conn;
+      Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
+      vec_meta_instance.emplace_back(instance);
+    }
   }
 
   syslog(Logger::INFO, "meta instance %d update", vec_meta_instance.size());
 
-  return 1;
+  return true;
 }
 
-int Instance_info::get_storage_instance() {
+bool Instance_info::get_storage_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  cJSON *root;
-  cJSON *item;
-  cJSON *sub_item;
-  char *cjson;
-  int retry = 3;
-  cJSON *ret_root;
+  kunlun::MysqlConnectionOption options;
+  options.autocommit = true;
+  options.ip = meta_svr_ip;
+  options.port_num = meta_svr_port;
+  options.user = meta_svr_user;
+  options.password = meta_svr_pwd;
 
-  root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "job_type", "get_instance");
-  cJSON_AddStringToObject(root, "instance_type", "storage_instance");
-  int ip_count = 0;
-  for (auto &local_ip : Job::get_instance()->vec_local_ip) {
-    std::string node_ip = "node_ip" + std::to_string(ip_count++);
-    cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
+  kunlun::MysqlConnection mysql_conn(options);
+  if (!mysql_conn.Connect()) {
+    syslog(Logger::ERROR, "connect to metadata db failed: %s",
+           mysql_conn.getErr());
+    return false;
   }
 
-  cjson = cJSON_Print(root);
-  cJSON_Delete(root);
+  kunlun::MysqlResult result_set;
+  char sql[2048] = {0};
+  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.shard_nodes");
 
-  std::string post_url = "http://" + cluster_mgr_http_ip + ":" +
-                         std::to_string(cluster_mgr_http_port);
-
-  std::string result_str;
-  while (retry-- > 0 && !Job::do_exit) {
-    if (Http_client::get_instance()->Http_client_post_para(
-            post_url.c_str(), cjson, result_str) == 0)
-      break;
-  }
-  free(cjson);
-
-  if (retry < 0) {
-    syslog(Logger::ERROR, "get_storage_instance fail because http post");
-    return 0;
+  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+  if (ret != 0) {
+    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+           mysql_conn.getErr());
+    return false;
   }
 
-  // syslog(Logger::INFO, "result_str storage=%s", result_str.c_str());
-  ret_root = cJSON_Parse(result_str.c_str());
-  if (ret_root == NULL)
-    return 0;
-
-  for (auto &instance : vec_storage_instance)
+  for (auto &instance:vec_storage_instance)
     delete instance;
   vec_storage_instance.clear();
+  if (result_set.GetResultLinesNum() > 0) {
+    int lines = result_set.GetResultLinesNum();
+    for (int i = 0; i < lines; i++) {
+      std::string ip;
+      int port;
+      std::string user;
+      std::string pwd;
 
-  int node_count = 0;
-  while (true) {
-    std::string node_str = "storage_instance" + std::to_string(node_count++);
-    item = cJSON_GetObjectItem(ret_root, node_str.c_str());
-    if (item == NULL)
-      break;
+      ip = result_set[i]["hostaddr"];
+      port = stoi(result_set[i]["port"]);
+      user = result_set[i]["user_name"];
+      pwd = result_set[i]["passwd"];
 
-    std::string ip;
-    int port;
-    std::string user;
-    std::string pwd;
-
-    sub_item = cJSON_GetObjectItem(item, "ip");
-    if (sub_item == NULL)
-      break;
-    ip = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "port");
-    if (sub_item == NULL)
-      break;
-    port = sub_item->valueint;
-
-    sub_item = cJSON_GetObjectItem(item, "user");
-    if (sub_item == NULL)
-      break;
-    user = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "pwd");
-    if (sub_item == NULL)
-      break;
-    pwd = sub_item->valuestring;
-
-    Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
-    vec_storage_instance.emplace_back(instance);
-
-    sub_item = cJSON_GetObjectItem(item, "cluster");
-    if (sub_item == NULL)
-      break;
-    instance->cluster = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "shard");
-    if (sub_item == NULL)
-      break;
-    instance->shard = sub_item->valuestring;
-
-    MYSQL_CONN *conn = new MYSQL_CONN();
-    instance->mysql_conn = conn;
+      Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
+      vec_storage_instance.emplace_back(instance);
+    }
   }
 
   syslog(Logger::INFO, "storage instance %d update",
          vec_storage_instance.size());
 
-  return 1;
+  return true;
 }
 
-int Instance_info::get_computer_instance() {
+bool Instance_info::get_computer_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  cJSON *root;
-  cJSON *item;
-  cJSON *sub_item;
-  char *cjson;
-  int retry = 3;
-  cJSON *ret_root;
+  kunlun::MysqlConnectionOption options;
+  options.autocommit = true;
+  options.ip = meta_svr_ip;
+  options.port_num = meta_svr_port;
+  options.user = meta_svr_user;
+  options.password = meta_svr_pwd;
 
-  root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "job_type", "get_instance");
-  cJSON_AddStringToObject(root, "instance_type", "computer_instance");
-  int ip_count = 0;
-  for (auto &local_ip : Job::get_instance()->vec_local_ip) {
-    std::string node_ip = "node_ip" + std::to_string(ip_count++);
-    cJSON_AddStringToObject(root, node_ip.c_str(), local_ip.c_str());
+  kunlun::MysqlConnection mysql_conn(options);
+  if (!mysql_conn.Connect()) {
+    syslog(Logger::ERROR, "connect to metadata db failed: %s",
+           mysql_conn.getErr());
+    return false;
   }
 
-  cjson = cJSON_Print(root);
-  cJSON_Delete(root);
+  kunlun::MysqlResult result_set;
+  char sql[2048] = {0};
+  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.comp_nodes");
 
-  std::string post_url = "http://" + cluster_mgr_http_ip + ":" +
-                         std::to_string(cluster_mgr_http_port);
-
-  std::string result_str;
-  while (retry-- > 0 && !Job::do_exit) {
-    if (Http_client::get_instance()->Http_client_post_para(
-            post_url.c_str(), cjson, result_str) == 0)
-      break;
-  }
-  free(cjson);
-
-  if (retry < 0) {
-    syslog(Logger::ERROR, "get_computer_instance fail because http post");
-    return 0;
+  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+  if (ret != 0) {
+    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+           mysql_conn.getErr());
+    return false;
   }
 
-  // syslog(Logger::INFO, "result_str computer=%s", result_str.c_str());
-  ret_root = cJSON_Parse(result_str.c_str());
-  if (ret_root == NULL)
-    return 0;
-
-  for (auto &instance : vec_computer_instance)
+  for (auto &instance:vec_computer_instance)
     delete instance;
   vec_computer_instance.clear();
+  if (result_set.GetResultLinesNum() > 0) {
+    int lines = result_set.GetResultLinesNum();
+    for (int i = 0; i < lines; i++) {
+      std::string ip;
+      int port;
+      std::string user;
+      std::string pwd;
 
-  int node_count = 0;
-  while (true) {
-    std::string node_str = "computer_instance" + std::to_string(node_count++);
-    item = cJSON_GetObjectItem(ret_root, node_str.c_str());
-    if (item == NULL)
-      break;
+      ip = result_set[i]["hostaddr"];
+      port = stoi(result_set[i]["port"]);
+      user = result_set[i]["user_name"];
+      pwd = result_set[i]["passwd"];
 
-    std::string ip;
-    int port;
-    std::string user;
-    std::string pwd;
-
-    sub_item = cJSON_GetObjectItem(item, "ip");
-    if (sub_item == NULL)
-      break;
-    ip = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "port");
-    if (sub_item == NULL)
-      break;
-    port = sub_item->valueint;
-
-    sub_item = cJSON_GetObjectItem(item, "user");
-    if (sub_item == NULL)
-      break;
-    user = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "pwd");
-    if (sub_item == NULL)
-      break;
-    pwd = sub_item->valuestring;
-
-    Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
-    vec_computer_instance.emplace_back(instance);
-
-    sub_item = cJSON_GetObjectItem(item, "cluster");
-    if (sub_item == NULL)
-      break;
-    instance->cluster = sub_item->valuestring;
-
-    sub_item = cJSON_GetObjectItem(item, "comp");
-    if (sub_item == NULL)
-      break;
-    instance->comp = sub_item->valuestring;
-
-    PGSQL_CONN *conn = new PGSQL_CONN();
-    instance->pgsql_conn = conn;
+      Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
+      vec_computer_instance.emplace_back(instance);
+    }
   }
 
   syslog(Logger::INFO, "computer instance %d update",
          vec_computer_instance.size());
 
-  return 1;
+  return true;
 }
 
 void Instance_info::remove_storage_instance(std::string &ip, int port) {
@@ -401,10 +247,20 @@ void Instance_info::remove_storage_instance(std::string &ip, int port) {
   for (auto it = vec_storage_instance.begin(); it != vec_storage_instance.end();
        it++) {
     if ((*it)->ip == ip && (*it)->port == port) {
+      delete *it;
       vec_storage_instance.erase(it);
-      break;
+      return;
     }
   }
+
+	for(auto it = vec_meta_instance.begin(); it != vec_meta_instance.end(); 
+      it++)	{
+		if((*it)->ip == ip && (*it)->port == port) {
+			delete *it;
+			vec_meta_instance.erase(it);
+			return;
+		}
+	}
 }
 
 void Instance_info::remove_computer_instance(std::string &ip, int port) {
@@ -413,8 +269,9 @@ void Instance_info::remove_computer_instance(std::string &ip, int port) {
   for (auto it = vec_computer_instance.begin();
        it != vec_computer_instance.end(); it++) {
     if ((*it)->ip == ip && (*it)->port == port) {
+      delete *it;
       vec_computer_instance.erase(it);
-      break;
+      return;
     }
   }
 }
@@ -457,7 +314,7 @@ void Instance_info::set_auto_pullup(int seconds, int port) {
   }
 }
 
-bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
+bool Instance_info::get_mysql_alive(MYSQL_CONN &mysql_conn, std::string &ip,
                                     int port, std::string &user,
                                     std::string &psw) {
   // syslog(Logger::INFO, "get_mysql_alive ip=%s,port=%d,user=%s,psw=%s",
@@ -466,7 +323,7 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
   int retry = stmt_retries;
 
   while (retry--) {
-    if (mysql_conn->connect(NULL, ip.c_str(), port, user.c_str(),
+    if (mysql_conn.connect(NULL, ip.c_str(), port, user.c_str(),
                             psw.c_str())) {
       syslog(Logger::ERROR,
              "connect to mysql error ip=%s,port=%d,user=%s,psw=%s", ip.c_str(),
@@ -474,11 +331,11 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
       continue;
     }
 
-    if (mysql_conn->send_stmt(SQLCOM_SELECT, "select version()"))
+    if (mysql_conn.send_stmt(SQLCOM_SELECT, "select version()"))
       continue;
 
     MYSQL_ROW row;
-    if ((row = mysql_fetch_row(mysql_conn->result))) {
+    if ((row = mysql_fetch_row(mysql_conn.result))) {
       // syslog(Logger::INFO, "row[]=%s",row[0]);
       if (strcasestr(row[0], "kunlun-storage"))
         break;
@@ -488,7 +345,7 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
 
     break;
   }
-  mysql_conn->free_mysql_result();
+  mysql_conn.free_mysql_result();
 
   if (retry < 0)
     return false;
@@ -496,7 +353,7 @@ bool Instance_info::get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip,
   return true;
 }
 
-bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
+bool Instance_info::get_pgsql_alive(PGSQL_CONN &pgsql_conn, std::string &ip,
                                     int port, std::string &user,
                                     std::string &psw) {
   // syslog(Logger::INFO, "get_pgsql_alive ip=%s,port=%d,user=%s,psw=%s",
@@ -505,7 +362,7 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
   int retry = stmt_retries;
 
   while (retry--) {
-    if (pgsql_conn->connect("postgres", ip.c_str(), port, user.c_str(),
+    if (pgsql_conn.connect("postgres", ip.c_str(), port, user.c_str(),
                             psw.c_str())) {
       syslog(Logger::ERROR,
              "connect to pgsql error ip=%s,port=%d,user=%s,psw=%s", ip.c_str(),
@@ -513,19 +370,19 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
       continue;
     }
 
-    if (pgsql_conn->send_stmt(PG_COPYRES_TUPLES, "select version()"))
+    if (pgsql_conn.send_stmt(PG_COPYRES_TUPLES, "select version()"))
       continue;
 
-    if (PQntuples(pgsql_conn->result) == 1) {
+    if (PQntuples(pgsql_conn.result) == 1) {
       // syslog(Logger::INFO, "presult = %s",
       // PQgetvalue(pgsql_conn.result,0,0));
-      if (strcasestr(PQgetvalue(pgsql_conn->result, 0, 0), "PostgreSQL"))
+      if (strcasestr(PQgetvalue(pgsql_conn.result, 0, 0), "PostgreSQL"))
         break;
     }
 
     break;
   }
-  pgsql_conn->free_pgsql_result();
+  pgsql_conn.free_pgsql_result();
 
   if (retry < 0)
     return false;
@@ -536,7 +393,6 @@ bool Instance_info::get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip,
 void Instance_info::keepalive_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  std::string install_path;
   /////////////////////////////////////////////////////////////
   // keep alive of meta
   for (auto &instance : vec_meta_instance) {
@@ -590,7 +446,7 @@ void Instance_info::keepalive_instance() {
       syslog(Logger::ERROR, "computer_instance no alive, ip=%s, port=%d",
              instance->ip.c_str(), instance->port);
       instance->pullup_wait = pullup_wait_const;
-      Job::get_instance()->job_control_computer(instance->port, 2);
+      Job::get_instance()->job_control_computer(instance->ip, instance->port, 2);
     }
   }
 }
@@ -707,7 +563,7 @@ bool Instance_info::get_vec_path(std::vector<std::string> &vec_path,
 
   cStart = paths.c_str();
   while (*cStart != '\0') {
-    cEnd = strchr(cStart, ';');
+    cEnd = strchr(cStart, ',');
     if (cEnd == NULL) {
       path = std::string(cStart, strlen(cStart));
       trimString(path);
@@ -726,10 +582,10 @@ bool Instance_info::get_vec_path(std::vector<std::string> &vec_path,
   return (vec_path.size() > 0);
 }
 
-bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
+bool Instance_info::get_path_space(std::vector<std::string> &vec_paths,
                                    std::string &result) {
   bool ret = true;
-  std::string info, path_used;
+  std::string path_used;
   uint64_t u_used, u_free;
 
   std::vector<std::string> vec_sub_path;
@@ -739,20 +595,20 @@ bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
   vec_sub_path.emplace_back("/instance_data/comp_datadir");
 
   std::vector<std::string> vec_path_index;
-  vec_path_index.emplace_back("paths0");
-  vec_path_index.emplace_back("paths1");
-  vec_path_index.emplace_back("paths2");
-  vec_path_index.emplace_back("paths3");
+  vec_path_index.emplace_back("path0");
+  vec_path_index.emplace_back("path1");
+  vec_path_index.emplace_back("path2");
+  vec_path_index.emplace_back("path3");
 
   vec_vec_path_used_free.clear();
 
   for (int i = 0; i < 4; i++) {
     std::vector<std::string> vec_path;
     if (!get_vec_path(vec_path, vec_paths[i])) {
-      if (info.length() > 0)
-        info += ";" + vec_paths[i];
+      if (result.length() > 0)
+        result += ";" + vec_paths[i];
       else
-        info = vec_paths[i];
+        result = vec_paths[i];
 
       ret = false;
       continue;
@@ -761,10 +617,10 @@ bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
     std::vector<Tpye_Path_Used_Free> vec_path_used_free;
     for (auto &path : vec_path) {
       if (!get_path_free(path, u_free)) {
-        if (info.length() > 0)
-          info += ";" + path;
+        if (result.length() > 0)
+          result += ";" + path;
         else
-          info = path;
+          result = path;
 
         ret = false;
         continue;
@@ -781,38 +637,25 @@ bool Instance_info::set_path_space(std::vector<std::string> &vec_paths,
   }
 
   // json for return
-  cJSON *root = cJSON_CreateObject();
-  cJSON *item;
-  cJSON *item_sub;
-  cJSON *item_paths;
-  char *cjson = NULL;
-
+  Json::Value root;
+  
   if (ret) {
-    cJSON_AddStringToObject(root, "result", "succeed");
-    cJSON_AddStringToObject(root, "info", "");
-
     for (int i = 0; i < 4; i++) {
-      item_paths = cJSON_CreateArray();
-      cJSON_AddItemToObject(root, vec_path_index[i].c_str(), item_paths);
+      Json::Value list;
       for (auto &path_used_free : vec_vec_path_used_free[i]) {
-        item_sub = cJSON_CreateObject();
-        cJSON_AddItemToArray(item_paths, item_sub);
-        cJSON_AddStringToObject(item_sub, "path",
-                                std::get<0>(path_used_free).c_str());
-        cJSON_AddNumberToObject(item_sub, "used", std::get<1>(path_used_free));
-        cJSON_AddNumberToObject(item_sub, "free", std::get<2>(path_used_free));
+        Json::Value para_json_array;
+        para_json_array["path"] = std::get<0>(path_used_free);
+        para_json_array["used"] = std::get<1>(path_used_free);
+        para_json_array["free"] = std::get<2>(path_used_free);
+        list.append(para_json_array);
       }
+      root[vec_path_index[i]] = list;
     }
-  } else {
-    info += " is error";
-    cJSON_AddStringToObject(root, "result", "error");
-    cJSON_AddStringToObject(root, "info", info.c_str());
-  }
 
-  cjson = cJSON_Print(root);
-  result = cjson;
-  cJSON_Delete(root);
-  free(cjson);
+    Json::FastWriter writer;
+    writer.omitEndingLineFeed();
+    result = writer.write(root);
+  }
 
   return ret;
 }

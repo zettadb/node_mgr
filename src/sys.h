@@ -15,6 +15,7 @@
 #include <map>
 
 class Thread;
+typedef std::pair<std::string, int> Tpye_Ip_Port;
 
 /*
 	Singleton class for global settings and functionality.
@@ -66,7 +67,8 @@ public:
 		Assert(m_global_instance != NULL);
 		return m_global_instance;
 	}
-	static bool regiest_to_meta();
+	static bool connet_to_meta_master();
+	static bool regiest_to_meta_master();
 
 	const std::string &get_config_path() const
 	{

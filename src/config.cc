@@ -24,27 +24,24 @@ extern int64_t mysql_read_timeout;
 extern int64_t mysql_write_timeout;
 extern int64_t mysql_max_packet_size;
 
-extern int64_t num_job_threads;
-extern int64_t num_http_threads;
-extern int64_t node_mgr_http_port;
+extern std::string meta_group_seeds;
+extern std::string meta_svr_user;
+extern std::string meta_svr_pwd;
+extern std::string meta_svr_ip;
+extern int64_t meta_svr_port;
+extern std::vector<Tpye_Ip_Port> vec_meta_ip_port;
+
+extern std::string comp_datadir;
+extern std::string datadir;
+extern std::string logdir;
+extern std::string wal_log_dir;
+
 extern int64_t node_mgr_brpc_http_port;
-extern std::string http_web_path;
-extern std::string http_upload_path;
-extern std::string http_cmd_version;
-
-extern std::string cluster_mgr_http_ip;
-extern int64_t cluster_mgr_http_port;
-
 extern std::string program_binaries_path;
 extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
 
-extern std::string dev_interface;
-extern std::string meta_host;
-extern int64_t meta_port;
-extern std::string meta_user;
-extern std::string meta_pwd;
 extern std::string node_mgr_util_path;
 extern std::string node_mgr_tmp_data_path;
 extern std::string prometheus_path;
@@ -182,6 +179,13 @@ void Configs::define_configs() {
   define_int_config("num_worker_threads", num_worker_threads, 1, 100, 3,
                     "Number of worker threads to create.");
 
+  define_str_config("meta_group_seeds", meta_group_seeds, "",
+                    "meta group seeds");
+  define_str_config("meta_user", meta_svr_user, "",
+                    "meta data server user account");
+  define_str_config("meta_pwd", meta_svr_pwd, "",
+                    "meta data server user's password");
+
   define_int_config(
       "thread_work_interval", thread_work_interval, 1, 100, 3,
       "Interval in seconds a thread waits after it finds no work to do.");
@@ -194,12 +198,6 @@ void Configs::define_configs() {
       "Interval in milli-seconds a statement is resent for execution when it "
       "fails and we believe MySQL node will be ready in a while.");
 
-  define_int_config("num_job_threads", num_job_threads, 1, 10, 3,
-                    "Number of job work threads to create.");
-  define_int_config("num_http_threads", num_http_threads, 1, 10, 3,
-                    "Number of http server threads to create.");
-  define_int_config("node_mgr_http_port", node_mgr_http_port, 1000, 65535, 5001,
-                    "http server listen port.");
   define_int_config("brpc_http_port", node_mgr_brpc_http_port, 1000,
                     65535, 5011, "node_mgr brpc http server listen port.");
 
@@ -208,19 +206,12 @@ void Configs::define_configs() {
                       getpid());
   Assert(slen < sizeof(def_log_path));
 
+  define_str_config("comp_datadir", comp_datadir, "/home/kunlun", "comp_datadir path");
+  define_str_config("datadir", datadir, "/home/kunlun", "datadir path");
+  define_str_config("logdir", logdir, "/home/kunlun", "logdir path");
+  define_str_config("wal_log_dir", wal_log_dir, "/home/kunlun", "wal_log_dir path");
+
   define_str_config("log_file", log_file_path, def_log_path, "log file path");
-
-  define_str_config("http_web_path", http_web_path, "./web", "http_web_path");
-  define_str_config("http_upload_path", http_upload_path, "./upload",
-                    "http_upload_path");
-
-  define_int_config("cluster_mgr_http_port", cluster_mgr_http_port, 0, 65535,
-                    5000, "cluster_mgr_http_port");
-  define_str_config("cluster_mgr_http_ip", cluster_mgr_http_ip, "localhost",
-                    "cluster_mgr_http_ip");
-
-  define_str_config("http_cmd_version", http_cmd_version, "0.1",
-                    "http_cmd_version");
 
   define_str_config("program_binaries_path", program_binaries_path,
                     "../../../program_binaries", "program_binaries_path");
@@ -230,13 +221,6 @@ void Configs::define_configs() {
                     "percona-8.0.18-bin-rel", "storage_prog_package_name");
   define_str_config("computer_prog_package_name", computer_prog_package_name,
                     "postgresql-11.5-rel", "computer_prog_package_name");
-
-  define_str_config("dev_interface", dev_interface, "eth0",
-                    "Net Interface device name");
-  define_str_config("meta_host", meta_host, "127.0.0.1", "meta_host");
-  define_int_config("meta_port", meta_port, 1000, 65536, 6001, "meta_port");
-  define_str_config("meta_user", meta_user, "pgx", "meta_user");
-  define_str_config("meta_pwd", meta_pwd, "pgx_pwd", "meta_pass");
 
   define_str_config("node_mgr_util_path", node_mgr_util_path, "./util",
                     "node_mgr_util_path");
@@ -450,6 +434,7 @@ public:
         Return 0 on success;
         -9 on log entry format error
         -8 if there are vars that must be assigned a value are not so.
+        -10 meta_group_seeds is invalid
 */
 int Configs::process_config_file(const std::string &fn) {
   char line[1024];
@@ -512,6 +497,34 @@ int Configs::process_config_file(const std::string &fn) {
         nbad, bad_vars.c_str());
     return -8;
   }
+
+  // get meta_ip_port by meta_group_seeds
+  char *cStart, *cEnd;
+  cStart = (char *)meta_group_seeds.c_str();
+  while (*cStart != '\0') {
+    cEnd = strchr(cStart, ':');
+    if (cEnd == NULL)
+      break;
+
+    meta_svr_ip = std::string(cStart, cEnd - cStart);
+
+    cStart = cEnd + 1;
+    cEnd = strchr(cStart, ',');
+    meta_svr_port = atoi(cStart);
+    if (cEnd == NULL)
+      *cStart = '\0';
+    else
+      cStart = cEnd + 1;
+
+    vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
+  }
+
+  if (vec_meta_ip_port.size() == 0) {
+    syslog(Logger::ERROR, "meta_group_seeds is invalid : %s",
+           meta_group_seeds.c_str());
+    return -10;
+  }
+
   return 0;
 }
 

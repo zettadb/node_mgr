@@ -34,8 +34,8 @@ public:
   std::string cluster;
   std::string shard;
   std::string comp;
-  MYSQL_CONN *mysql_conn;
-  PGSQL_CONN *pgsql_conn;
+  MYSQL_CONN mysql_conn;
+  PGSQL_CONN pgsql_conn;
 
   // pullup_wait==0 ：start keepalive,   pullup_wait>0 : wait to 0
   int pullup_wait;
@@ -66,17 +66,16 @@ public:
   }
 
   void get_local_instance();
-  void get_local_instance(cJSON *root);
-  int get_meta_instance();
-  int get_storage_instance();
-  int get_computer_instance();
+  bool get_meta_instance();
+  bool get_storage_instance();
+  bool get_computer_instance();
   void remove_storage_instance(std::string &ip, int port);
   void remove_computer_instance(std::string &ip, int port);
 
   void set_auto_pullup(int seconds, int port);
-  bool get_mysql_alive(MYSQL_CONN *mysql_conn, std::string &ip, int port,
+  bool get_mysql_alive(MYSQL_CONN &mysql_conn, std::string &ip, int port,
                        std::string &user, std::string &psw);
-  bool get_pgsql_alive(PGSQL_CONN *pgsql_conn, std::string &ip, int port,
+  bool get_pgsql_alive(PGSQL_CONN &pgsql_conn, std::string &ip, int port,
                        std::string &user, std::string &psw);
   void keepalive_instance();
 
@@ -84,7 +83,7 @@ public:
   bool get_path_free(std::string &path, uint64_t &free);
   void trimString(std::string &str);
   bool get_vec_path(std::vector<std::string> &vec_path, std::string &paths);
-  bool set_path_space(std::vector<std::string> &vec_paths, std::string &result);
+  bool get_path_space(std::vector<std::string> &vec_paths, std::string &result);
 };
 
 #endif // !INSTANCE_INFO_H

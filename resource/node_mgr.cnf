@@ -1,3 +1,7 @@
+# Copyright (c) 2019 ZettaDB inc. All rights reserved.
+# This source code is licensed under Apache 2.0 License,
+# combined with Common Clause Condition 1.0, as detailed in the NOTICE file.
+
 # MySQL client connection timeout in seconds
 mysql_connect_timeout = 3
 
@@ -10,15 +14,18 @@ mysql_write_timeout = 3
 # MySQL client max packet size in bytes.
 mysql_max_packet_size = 1073741824
 
+# NO. of times a SQL statement is resent for execution when MySQL connection broken.
+statement_retries = 2
+
+# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
+statement_retry_interval_ms = 1000
+
+##################################################################
+# for log file
+
 # Log verbosity or amount of details, options are(in increasing details):
 # {ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.
 log_verbosity = INFO
-
-#Number of worker threads to create and maintain.
-num_worker_threads=1
-
-# Interval in seconds a thread waits after it finds no work to do.
-thread_work_interval = 3
 
 # 100MB, if log grows larger than this it's rotated
 max_log_file_size = 100
@@ -26,29 +33,19 @@ max_log_file_size = 100
 # log file path and name
 log_file = ../log/sys_node_mgr.log
 
-# NO. of times a SQL statement is resent for execution when MySQL connection broken.
-statement_retries = 3
+# node_mgr util folder path
+node_mgr_util_path = ./util
 
-# Interval in milli-seconds a statement is resent for execution when it fails and we believe MySQL node will be ready in a while.
-statement_retry_interval_ms = 1000
+# node_mgr tmp data dir path
+node_mgr_tmp_data_path = ../data
 
-# Number of job threads to create.
-num_job_threads=3
+##################################################################
+# for meta
 
-# Number of http threads to create.
-num_http_threads=3
-
-# http web path
-http_web_path = ./web
-
-# http upload path
-http_upload_path = ./upload
-
-# meta data server listening port 
-meta_port = 6001
-
-# meta data server ip address
-meta_host = 192.168.0.135
+# meta server group seeds, note: no space in the middle of string
+# only one seed in no_rep mode, must three or more seeds in mgr/rbr mode
+#meta_group_seeds = 192.168.0.128:58100,192.168.0.128:58103,192.168.0.128:58106
+meta_group_seeds = 192.168.0.128:58100
 
 # meta data server user account
 meta_user = pgx
@@ -56,47 +53,46 @@ meta_user = pgx
 # meta data server user's password 
 meta_pwd = pgx_pwd
 
-# Net Interface device name 
-dev_interface = eno1 
-
-# cluster_mgr http server ip address
-cluster_mgr_http_ip = 192.168.0.135
-
-# cluster_mgr http server port
-cluster_mgr_http_port = 6001
-
-# node_mgr http server port
-node_mgr_http_port = 5010
+##################################################################
+# for web http interface
 
 # node_mgr brpc http server port
-brpc_http_port = 5011
-
-# node_mgr util folder path
-node_mgr_util_path = ./util
-
-# node_mgr tmp data dir path
-node_mgr_tmp_data_path = ../data
-
-# http cmd version
-http_cmd_version = 0.9
-
-# program_binaries_path
-program_binaries_path = ../../../program_binaries
-
-# instance_binaries_path
-instance_binaries_path = ../../../instance_binaries
-
-# storage_prog_package_name
-storage_prog_package_name = percona-8.0.18-bin-rel
-
-# computer_prog_package_name
-computer_prog_package_name = postgresql-11.5-rel
-
-# prometheus path
-prometheus_path = ../../../program_binaries/prometheus
-
-# prometheus port start
-prometheus_port_start = 57010
+brpc_http_port = 58002
 
 # cluster_mgr ip
-local_ip = 127.0.0.1
+local_ip = 192.168.0.128
+
+# full paths to store data directories of all computing nodes
+# maybe /home/kunlun,/nvme2,/nvme3    note: no space in the middle of string
+comp_datadir = /home/kunlun
+
+# full paths to store data directories of all storage nodes
+# maybe /home/kunlun,/nvme2,/nvme3    note: no space in the middle of string
+datadir = /home/kunlun
+
+# full paths to store binlog dirs of all storage nodes
+# maybe /home/kunlun,/nvme2,/nvme3    note: no space in the middle of string
+logdir = /home/kunlun
+
+# full paths to store wal log dirs of all storage nodes
+# maybe /home/kunlun,/nvme2,/nvme3   note: no space in the middle of string
+wal_log_dir = /home/kunlun
+
+# program_binaries_path
+program_binaries_path = /home/kunlun/program_binaries
+
+# instance_binaries_path
+instance_binaries_path = /home/kunlun/instance_binaries
+
+# storage_prog_package_name
+storage_prog_package_name = kunlun-storage-0.9.1
+
+# computer_prog_package_name
+computer_prog_package_name = kunlun-server-0.9.1
+
+# prometheus path
+prometheus_path = /home/kunlun/program_binaries/prometheus
+
+# prometheus port start
+prometheus_port_start = 58010
+

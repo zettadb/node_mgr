@@ -15,6 +15,7 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Werror -O2")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Werror -O2")
 endif()
+
 #set(ZETTALIB_PATH "/home/snowao/code/kunlun/zettalib")
 if(NOT DEFINED ZETTALIB_PATH)
   message(FATAL_ERROR "ZETTALIB_PATH variable is not speicified, set by -DZETTALIB_PATH=?")
@@ -37,6 +38,7 @@ link_directories(${ZETTALIB_LIB_PATH})
 add_subdirectory(src/server_http)
 add_subdirectory(src/request_dealer)
 add_subdirectory(src/util)
+add_subdirectory(src/util_func)
 
 add_executable(node_mgr
   src/config.cc 
@@ -48,18 +50,17 @@ add_executable(node_mgr
   src/mysql_conn.cc 
   src/pgsql_conn.cc 
   src/instance_info.cc 
-  src/http_server.cc 
-  src/http_client.cc 
-  src/job.cc 
-  src/cjson.cc)
+  src/job.cc)
 configure_file(src/sys_config.h.in sys_config.h)
 target_include_directories(node_mgr PUBLIC
-	"${PROJECT_BINARY_DIR}"
+  "${PROJECT_BINARY_DIR}"
+  "${ZETTALIB_INCLUDE_PATH}"
   "${VENDOR_OUTPUT_PATH}/include"
-  "${ZETTALIB_INCLUDE_PATH}")
+  "${PROJECT_SOURCE_DIR}/src/util_func")
 target_link_libraries(node_mgr 
   server_http 
   request_dealer
+  util_func 
   libzettalib.a 
   libbrpc.a 
   libprotobuf.a 
