@@ -27,6 +27,7 @@ enum ClusterRequestTypes {
   kPingPongType,
   kExecuteCommandType,
   kGetPathsSpaceType,
+  kCheckPortIdleType,
   kInstallStorageType,
   kInstallComputerType,
   kDeleteStorageType,

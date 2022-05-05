@@ -85,6 +85,15 @@ end:
 bool System::connet_to_meta_master() {
   int retry = 0;
 
+  if (vec_meta_ip_port.size() == 0)
+    return false;
+
+  if(vec_meta_ip_port.size() == 1){
+    meta_svr_ip = vec_meta_ip_port[0].first;
+    meta_svr_port = vec_meta_ip_port[0].second;
+    return true;
+  }
+
 retry_group_seeds:
   if (retry < vec_meta_ip_port.size()) {
     meta_svr_ip = vec_meta_ip_port[retry].first;
@@ -93,38 +102,40 @@ retry_group_seeds:
   } else
     return false;
 
-  kunlun::MysqlConnectionOption options;
-  options.autocommit = true;
-  options.ip = meta_svr_ip;
-  options.port_num = meta_svr_port;
-  options.user = meta_svr_user;
-  options.password = meta_svr_pwd;
+  {
+    kunlun::MysqlConnectionOption options;
+    options.autocommit = true;
+    options.ip = meta_svr_ip;
+    options.port_num = meta_svr_port;
+    options.user = meta_svr_user;
+    options.password = meta_svr_pwd;
 
-  kunlun::MysqlConnection mysql_conn(options);
-  if (!mysql_conn.Connect()) {
-    syslog(Logger::ERROR, "connect to metadata db failed: %s",
-           mysql_conn.getErr());
-    goto retry_group_seeds;
+    kunlun::MysqlConnection mysql_conn(options);
+    if (!mysql_conn.Connect()) {
+      syslog(Logger::ERROR, "connect to metadata db failed: %s",
+            mysql_conn.getErr());
+      goto retry_group_seeds;
+    }
+
+    kunlun::MysqlResult result_set;
+    char sql[2048] = {0};
+    sprintf(sql,
+            "select MEMBER_HOST,MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY'",
+            local_ip.c_str());
+
+    int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+    if (ret != 0) {
+      syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+            mysql_conn.getErr());
+      goto retry_group_seeds;
+    }
+    if (result_set.GetResultLinesNum() == 1) {
+      meta_svr_ip = result_set[0]["MEMBER_HOST"];
+      meta_svr_port = atoi(result_set[0]["MEMBER_PORT"]);
+      return true;
+    }else
+      goto retry_group_seeds;
   }
-
-  kunlun::MysqlResult result_set;
-  char sql[2048] = {0};
-  sprintf(sql,
-          "select MEMBER_HOST,MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY'",
-          local_ip.c_str());
-
-  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
-  if (ret != 0) {
-    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
-           mysql_conn.getErr());
-    goto retry_group_seeds;
-  }
-  if (result_set.GetResultLinesNum() == 1) {
-    meta_svr_ip = result_set[0]["MEMBER_HOST"];
-    meta_svr_port = atoi(result_set[0]["MEMBER_PORT"]);
-    return true;
-  }else
-    goto retry_group_seeds;
 
   return false;
 }

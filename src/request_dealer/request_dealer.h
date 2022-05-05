@@ -31,6 +31,7 @@ private:
   bool executeCommand();
   void constructCommand();
   bool getPathsSpace();
+  bool checkPortIdle();
   bool installStorage();
   bool installComputer();
   bool deleteStorage();

@@ -35,6 +35,9 @@ bool RequestDealer::Deal() {
   case kunlun::kExecuteCommandType:
     ret = executeCommand();
     break;
+  case kunlun::kCheckPortIdleType:
+    ret = checkPortIdle();
+    break;
   case kunlun::kGetPathsSpaceType:
     ret = getPathsSpace();
     break;
@@ -234,14 +237,13 @@ RequestDealer::~RequestDealer() {
 
 bool RequestDealer::getPathsSpace() {
   Json::Value para_json = json_root_["paras"];
-  std::vector<std::string> vec_paths;
+  deal_success_ = Instance_info::get_instance()->get_path_space(para_json, deal_info_);
+  return deal_success_;
+}
 
-  vec_paths.emplace_back(para_json["path0"].asString());
-  vec_paths.emplace_back(para_json["path1"].asString());
-  vec_paths.emplace_back(para_json["path2"].asString());
-  vec_paths.emplace_back(para_json["path3"].asString());
-
-  deal_success_ = Instance_info::get_instance()->get_path_space(vec_paths, deal_info_);
+bool RequestDealer::checkPortIdle(){
+  Json::Value para_json = json_root_["paras"];
+  deal_success_ = Instance_info::get_instance()->check_port_idle(para_json, deal_info_);
   return deal_success_;
 }
 

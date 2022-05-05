@@ -47,6 +47,9 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "get_paths_space"_hash:
     type_enum = kGetPathsSpaceType;
     break;
+  case "check_port_idle"_hash:
+    type_enum = kCheckPortIdleType;
+    break;
   case "install_storage"_hash:
     type_enum = kInstallStorageType;
     break;

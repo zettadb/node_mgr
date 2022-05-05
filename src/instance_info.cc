@@ -80,49 +80,55 @@ void Instance_info::get_local_instance() {
 bool Instance_info::get_meta_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  kunlun::MysqlConnectionOption options;
-  options.autocommit = true;
-  options.ip = meta_svr_ip;
-  options.port_num = meta_svr_port;
-  options.user = meta_svr_user;
-  options.password = meta_svr_pwd;
+retry_group_seeds:
+  {
+    kunlun::MysqlConnectionOption options;
+    options.autocommit = true;
+    options.ip = meta_svr_ip;
+    options.port_num = meta_svr_port;
+    options.user = meta_svr_user;
+    options.password = meta_svr_pwd;
 
-  kunlun::MysqlConnection mysql_conn(options);
-  if (!mysql_conn.Connect()) {
-    syslog(Logger::ERROR, "connect to metadata db failed: %s",
-           mysql_conn.getErr());
-    return false;
-  }
+    kunlun::MysqlConnection mysql_conn(options);
+    if (!mysql_conn.Connect()) {
+      syslog(Logger::ERROR, "connect to metadata db failed: %s",
+            mysql_conn.getErr());
+      if(System::get_instance()->connet_to_meta_master())
+        goto retry_group_seeds;
+      else
+        return false;
+    }
 
-  kunlun::MysqlResult result_set;
-  char sql[2048] = {0};
-  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.meta_db_nodes");
+    kunlun::MysqlResult result_set;
+    char sql[2048] = {0};
+    sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.meta_db_nodes");
 
-  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
-  if (ret != 0) {
-    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
-           mysql_conn.getErr());
-    return false;
-  }
+    int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+    if (ret != 0) {
+      syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+            mysql_conn.getErr());
+      return false;
+    }
 
-  for (auto &instance:vec_meta_instance)
-    delete instance;
-  vec_meta_instance.clear();
-  if (result_set.GetResultLinesNum() > 0) {
-    int lines = result_set.GetResultLinesNum();
-    for (int i = 0; i < lines; i++) {
-      std::string ip;
-      int port;
-      std::string user;
-      std::string pwd;
+    for (auto &instance:vec_meta_instance)
+      delete instance;
+    vec_meta_instance.clear();
+    if (result_set.GetResultLinesNum() > 0) {
+      int lines = result_set.GetResultLinesNum();
+      for (int i = 0; i < lines; i++) {
+        std::string ip;
+        int port;
+        std::string user;
+        std::string pwd;
 
-      ip = result_set[i]["hostaddr"];
-      port = stoi(result_set[i]["port"]);
-      user = result_set[i]["user_name"];
-      pwd = result_set[i]["passwd"];
+        ip = result_set[i]["hostaddr"];
+        port = stoi(result_set[i]["port"]);
+        user = result_set[i]["user_name"];
+        pwd = result_set[i]["passwd"];
 
-      Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
-      vec_meta_instance.emplace_back(instance);
+        Instance *instance = new Instance(Instance::META, ip, port, user, pwd);
+        vec_meta_instance.emplace_back(instance);
+      }
     }
   }
 
@@ -134,49 +140,55 @@ bool Instance_info::get_meta_instance() {
 bool Instance_info::get_storage_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
 
-  kunlun::MysqlConnectionOption options;
-  options.autocommit = true;
-  options.ip = meta_svr_ip;
-  options.port_num = meta_svr_port;
-  options.user = meta_svr_user;
-  options.password = meta_svr_pwd;
+retry_meta_master:
+  {
+    kunlun::MysqlConnectionOption options;
+    options.autocommit = true;
+    options.ip = meta_svr_ip;
+    options.port_num = meta_svr_port;
+    options.user = meta_svr_user;
+    options.password = meta_svr_pwd;
 
-  kunlun::MysqlConnection mysql_conn(options);
-  if (!mysql_conn.Connect()) {
-    syslog(Logger::ERROR, "connect to metadata db failed: %s",
-           mysql_conn.getErr());
-    return false;
-  }
+    kunlun::MysqlConnection mysql_conn(options);
+    if (!mysql_conn.Connect()) {
+      syslog(Logger::ERROR, "connect to metadata db failed: %s",
+            mysql_conn.getErr());
+      if(System::get_instance()->connet_to_meta_master())
+        goto retry_meta_master;
+      else
+        return false;
+    }
 
-  kunlun::MysqlResult result_set;
-  char sql[2048] = {0};
-  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.shard_nodes");
+    kunlun::MysqlResult result_set;
+    char sql[2048] = {0};
+    sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.shard_nodes");
 
-  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
-  if (ret != 0) {
-    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
-           mysql_conn.getErr());
-    return false;
-  }
+    int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+    if (ret != 0) {
+      syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+            mysql_conn.getErr());
+      return false;
+    }
 
-  for (auto &instance:vec_storage_instance)
-    delete instance;
-  vec_storage_instance.clear();
-  if (result_set.GetResultLinesNum() > 0) {
-    int lines = result_set.GetResultLinesNum();
-    for (int i = 0; i < lines; i++) {
-      std::string ip;
-      int port;
-      std::string user;
-      std::string pwd;
+    for (auto &instance:vec_storage_instance)
+      delete instance;
+    vec_storage_instance.clear();
+    if (result_set.GetResultLinesNum() > 0) {
+      int lines = result_set.GetResultLinesNum();
+      for (int i = 0; i < lines; i++) {
+        std::string ip;
+        int port;
+        std::string user;
+        std::string pwd;
 
-      ip = result_set[i]["hostaddr"];
-      port = stoi(result_set[i]["port"]);
-      user = result_set[i]["user_name"];
-      pwd = result_set[i]["passwd"];
+        ip = result_set[i]["hostaddr"];
+        port = stoi(result_set[i]["port"]);
+        user = result_set[i]["user_name"];
+        pwd = result_set[i]["passwd"];
 
-      Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
-      vec_storage_instance.emplace_back(instance);
+        Instance *instance = new Instance(Instance::STORAGE, ip, port, user, pwd);
+        vec_storage_instance.emplace_back(instance);
+      }
     }
   }
 
@@ -188,50 +200,56 @@ bool Instance_info::get_storage_instance() {
 
 bool Instance_info::get_computer_instance() {
   std::lock_guard<std::mutex> lock(mutex_instance_);
+  
+retry_meta_master:
+  {
+    kunlun::MysqlConnectionOption options;
+    options.autocommit = true;
+    options.ip = meta_svr_ip;
+    options.port_num = meta_svr_port;
+    options.user = meta_svr_user;
+    options.password = meta_svr_pwd;
 
-  kunlun::MysqlConnectionOption options;
-  options.autocommit = true;
-  options.ip = meta_svr_ip;
-  options.port_num = meta_svr_port;
-  options.user = meta_svr_user;
-  options.password = meta_svr_pwd;
+    kunlun::MysqlConnection mysql_conn(options);
+    if (!mysql_conn.Connect()) {
+      syslog(Logger::ERROR, "connect to metadata db failed: %s",
+            mysql_conn.getErr());
+      if(System::get_instance()->connet_to_meta_master())
+        goto retry_meta_master;
+      else
+        return false;
+    }
 
-  kunlun::MysqlConnection mysql_conn(options);
-  if (!mysql_conn.Connect()) {
-    syslog(Logger::ERROR, "connect to metadata db failed: %s",
-           mysql_conn.getErr());
-    return false;
-  }
+    kunlun::MysqlResult result_set;
+    char sql[2048] = {0};
+    sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.comp_nodes");
 
-  kunlun::MysqlResult result_set;
-  char sql[2048] = {0};
-  sprintf(sql, "select hostaddr,port,user_name,passwd from kunlun_metadata_db.comp_nodes");
+    int ret = mysql_conn.ExcuteQuery(sql, &result_set);
+    if (ret != 0) {
+      syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+            mysql_conn.getErr());
+      return false;
+    }
 
-  int ret = mysql_conn.ExcuteQuery(sql, &result_set);
-  if (ret != 0) {
-    syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
-           mysql_conn.getErr());
-    return false;
-  }
+    for (auto &instance:vec_computer_instance)
+      delete instance;
+    vec_computer_instance.clear();
+    if (result_set.GetResultLinesNum() > 0) {
+      int lines = result_set.GetResultLinesNum();
+      for (int i = 0; i < lines; i++) {
+        std::string ip;
+        int port;
+        std::string user;
+        std::string pwd;
 
-  for (auto &instance:vec_computer_instance)
-    delete instance;
-  vec_computer_instance.clear();
-  if (result_set.GetResultLinesNum() > 0) {
-    int lines = result_set.GetResultLinesNum();
-    for (int i = 0; i < lines; i++) {
-      std::string ip;
-      int port;
-      std::string user;
-      std::string pwd;
+        ip = result_set[i]["hostaddr"];
+        port = stoi(result_set[i]["port"]);
+        user = result_set[i]["user_name"];
+        pwd = result_set[i]["passwd"];
 
-      ip = result_set[i]["hostaddr"];
-      port = stoi(result_set[i]["port"]);
-      user = result_set[i]["user_name"];
-      pwd = result_set[i]["passwd"];
-
-      Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
-      vec_computer_instance.emplace_back(instance);
+        Instance *instance = new Instance(Instance::COMPUTER, ip, port, user, pwd);
+        vec_computer_instance.emplace_back(instance);
+      }
     }
   }
 
@@ -582,11 +600,16 @@ bool Instance_info::get_vec_path(std::vector<std::string> &vec_path,
   return (vec_path.size() > 0);
 }
 
-bool Instance_info::get_path_space(std::vector<std::string> &vec_paths,
-                                   std::string &result) {
+bool Instance_info::get_path_space(Json::Value &para, std::string &result) {
   bool ret = true;
-  std::string path_used;
   uint64_t u_used, u_free;
+  std::string path_used;
+  std::vector<std::string> vec_paths;
+
+  vec_paths.emplace_back(para["path0"].asString());
+  vec_paths.emplace_back(para["path1"].asString());
+  vec_paths.emplace_back(para["path2"].asString());
+  vec_paths.emplace_back(para["path3"].asString());
 
   std::vector<std::string> vec_sub_path;
   vec_sub_path.emplace_back("/instance_data/data_dir_path");
@@ -652,6 +675,64 @@ bool Instance_info::get_path_space(std::vector<std::string> &vec_paths,
       root[vec_path_index[i]] = list;
     }
 
+    Json::FastWriter writer;
+    writer.omitEndingLineFeed();
+    result = writer.write(root);
+  }
+
+  return ret;
+}
+
+bool Instance_info::check_port_idle(Json::Value &para, std::string &result){
+  bool ret = true;
+  int port, step;
+	FILE* pfd = NULL;
+	char buf[256];
+	std::string str_cmd;
+	std::string str_port;
+
+  port = para["port"].asInt();
+  step = para["step"].asInt();
+
+  while(1){
+    ret = true;
+    for(int i=0; i<step; i++){
+      str_port = std::to_string(port);
+      str_cmd = "netstat -anp | grep " + str_port;
+      syslog(Logger::INFO, "check_port_idle str_cmd : %s",str_cmd.c_str());
+
+      pfd = popen(str_cmd.c_str(), "r");
+      if(!pfd){
+        ret = false;
+        break;
+      }
+
+      while(fgets(buf, 256, pfd)) {
+        syslog(Logger::INFO, "check_port_idle %s",buf);
+        if(strstr(buf, str_port.c_str())) {
+          ret = false;
+          break;
+        }
+      }
+        
+      pclose(pfd);
+      pfd = NULL;
+
+      if(!ret)
+        break;
+    }
+
+    if(ret)
+      break;
+
+    port += step;
+  }
+
+  if(ret){
+    // json for return
+    Json::Value root;
+    root["port"] = port;
+  
     Json::FastWriter writer;
     writer.omitEndingLineFeed();
     result = writer.write(root);
