@@ -422,7 +422,7 @@ bool Job::job_node_exporter(Json::Value &para, std::string &job_info) {
 		pclose(pfd);
 	}
 
-  job_info = "node exporter succeed";
+  job_info = "node exporter successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   return true;
 
@@ -474,7 +474,7 @@ bool Job::job_control_instance(Json::Value &para, std::string &job_info) {
     goto end;
   }
 
-  job_info = "control instance succeed";
+  job_info = "control instance successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   System::get_instance()->set_auto_pullup_working(true);
   return true;
@@ -657,7 +657,7 @@ start:
     goto end;
   }
 
-  job_info = "install storage succeed";
+  job_info = "install storage successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   return true;
 
@@ -817,7 +817,7 @@ start:
     goto end;
   }
 
-  job_info = "install computer succeed";
+  job_info = "install computer successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   return true;
 
@@ -936,7 +936,7 @@ bool Job::job_delete_storage(Json::Value &para, std::string &job_info) {
     goto end;
   }
 
-  job_info = "delete storage succeed";
+  job_info = "delete storage successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   System::get_instance()->set_auto_pullup_working(true);
   return true;
@@ -1039,7 +1039,7 @@ bool Job::job_delete_computer(Json::Value &para, std::string &job_info) {
     goto end;
   }
 
-  job_info = "delete computer succeed";
+  job_info = "delete computer successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   System::get_instance()->set_auto_pullup_working(true);
   return true;
@@ -1121,8 +1121,8 @@ bool Job::job_backup_shard(Json::Value &para, std::string &job_info) {
   writer.omitEndingLineFeed();
   job_info = writer.write(root_ret);
 
-  // job_info = "backup succeed"; //for shard_backup_path
-  syslog(Logger::INFO, "backup succeed");
+  // job_info = "backup successfully"; //for shard_backup_path
+  syslog(Logger::INFO, "backup successfully");
   return true;
 
 end:
@@ -1205,7 +1205,7 @@ bool Job::job_restore_storage(Json::Value &para, std::string &job_info) {
     goto end;
   }
 
-  job_info = "restore storage succeed";
+  job_info = "restore storage successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   System::get_instance()->set_auto_pullup_working(true);
   return true;
@@ -1271,7 +1271,7 @@ bool Job::job_restore_computer(Json::Value &para, std::string &job_info) {
     //	goto end;
   }
 
-  job_info = "restore compouter succeed";
+  job_info = "restore compouter successfully";
   syslog(Logger::INFO, "%s", job_info.c_str());
   return true;
 
