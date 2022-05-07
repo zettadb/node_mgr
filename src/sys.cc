@@ -70,10 +70,14 @@ int System::create_instance(const std::string &cfg_path) {
     goto end;
   if ((ret = (Job::get_instance() == NULL)) != 0)
     goto end;
-  if ((ret = connet_to_meta_master()) == false)
+  if ((ret = connet_to_meta_master()) == false){
+    syslog(Logger::ERROR, "connect to metadata error");
     goto end;
-  if ((ret = regiest_to_meta_master()) == false)
+  }
+  if ((ret = regiest_to_meta_master()) == false){
+    syslog(Logger::ERROR, "regiest to metadata error");
     goto end;
+  }
 
   Instance_info::get_instance()->get_local_instance();
   return 0;
@@ -84,6 +88,7 @@ end:
 
 bool System::connet_to_meta_master() {
   int retry = 0;
+  std::string meta_ha_mode;
 
   if (vec_meta_ip_port.size() == 0)
     return false;
@@ -120,9 +125,7 @@ retry_group_seeds:
     kunlun::MysqlResult result_set;
     char sql[2048] = {0};
     sprintf(sql,
-            "select MEMBER_HOST,MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY'",
-            local_ip.c_str());
-
+            "select value from global_configuration where name='meta_ha_mode'");
     int ret = mysql_conn.ExcuteQuery(sql, &result_set);
     if (ret != 0) {
       syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
@@ -130,11 +133,50 @@ retry_group_seeds:
       goto retry_group_seeds;
     }
     if (result_set.GetResultLinesNum() == 1) {
-      meta_svr_ip = result_set[0]["MEMBER_HOST"];
-      meta_svr_port = atoi(result_set[0]["MEMBER_PORT"]);
-      return true;
+      meta_ha_mode = result_set[0]["meta_ha_mode"];
     }else
       goto retry_group_seeds;
+
+    result_set.Clean();
+    if(meta_ha_mode == "mgr"){
+      sprintf(sql,
+              "select MEMBER_HOST,MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY'",
+              local_ip.c_str());
+
+      ret = mysql_conn.ExcuteQuery(sql, &result_set);
+      if (ret != 0) {
+        syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+              mysql_conn.getErr());
+        goto retry_group_seeds;
+      }
+      if (result_set.GetResultLinesNum() == 1) {
+        meta_svr_ip = result_set[0]["MEMBER_HOST"];
+        meta_svr_port = atoi(result_set[0]["MEMBER_PORT"]);
+        return true;
+      }else
+        goto retry_group_seeds;
+    } else if(meta_ha_mode == "rbr") {
+      sprintf(sql,
+              "select hostaddr,port from meta_db_nodes where member_state='source'",
+              local_ip.c_str());
+
+      ret = mysql_conn.ExcuteQuery(sql, &result_set);
+      if (ret != 0) {
+        syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
+              mysql_conn.getErr());
+        goto retry_group_seeds;
+      }
+      if (result_set.GetResultLinesNum() == 1) {
+        meta_svr_ip = result_set[0]["hostaddr"];
+        meta_svr_port = atoi(result_set[0]["port"]);
+        return true;
+      }else
+        goto retry_group_seeds;
+    } else if (meta_ha_mode == "no_rep") {
+      return true;
+    } else {
+      syslog(Logger::ERROR, "meta_ha_mode: %s no support!", meta_ha_mode.c_str());
+    }
   }
 
   return false;
