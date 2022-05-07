@@ -140,8 +140,7 @@ retry_group_seeds:
     result_set.Clean();
     if(meta_ha_mode == "mgr"){
       sprintf(sql,
-              "select MEMBER_HOST,MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY'",
-              local_ip.c_str());
+              "select MEMBER_HOST,MEMBER_PORT from performance_schema.replication_group_members where MEMBER_ROLE='PRIMARY'");
 
       ret = mysql_conn.ExcuteQuery(sql, &result_set);
       if (ret != 0) {
@@ -157,8 +156,7 @@ retry_group_seeds:
         goto retry_group_seeds;
     } else if(meta_ha_mode == "rbr") {
       sprintf(sql,
-              "select hostaddr,port from meta_db_nodes where member_state='source'",
-              local_ip.c_str());
+              "select hostaddr,port from meta_db_nodes where member_state='source'");
 
       ret = mysql_conn.ExcuteQuery(sql, &result_set);
       if (ret != 0) {
