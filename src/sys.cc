@@ -156,7 +156,7 @@ retry_group_seeds:
         goto retry_group_seeds;
     } else if(meta_ha_mode == "rbr") {
       sprintf(sql,
-              "select hostaddr,port from meta_db_nodes where member_state='source'");
+              "select hostaddr,port from kunlun_metadata_db.meta_db_nodes where member_state='source'");
 
       ret = mysql_conn.ExcuteQuery(sql, &result_set);
       if (ret != 0) {
