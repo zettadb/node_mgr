@@ -125,7 +125,7 @@ retry_group_seeds:
     kunlun::MysqlResult result_set;
     char sql[2048] = {0};
     sprintf(sql,
-            "select value from global_configuration where name='meta_ha_mode'");
+            "select value from kunlun_metadata_db.global_configuration where name='meta_ha_mode'");
     int ret = mysql_conn.ExcuteQuery(sql, &result_set);
     if (ret != 0) {
       syslog(Logger::ERROR, "metadata db query:[%s] failed: %s", sql,
@@ -133,7 +133,7 @@ retry_group_seeds:
       goto retry_group_seeds;
     }
     if (result_set.GetResultLinesNum() == 1) {
-      meta_ha_mode = result_set[0]["meta_ha_mode"];
+      meta_ha_mode = result_set[0]["value"];
     }else
       goto retry_group_seeds;
 
@@ -221,12 +221,8 @@ bool System::regiest_to_meta_master() {
     sprintf(
         sql,
         "update kunlun_metadata_db.server_nodes "
-        "set nodemgr_port=%d,comp_datadir='%s',"
-        "datadir='%s',logdir='%s',wal_log_dir='%s'"
-        " where hostaddr='%s'",
-        node_mgr_brpc_http_port, comp_datadir.c_str(),
-        datadir.c_str(),logdir.c_str(),
-        wal_log_dir.c_str(),local_ip.c_str());
+        "set nodemgr_port=%d where hostaddr='%s'",
+        node_mgr_brpc_http_port, local_ip.c_str());
     kunlun::MysqlResult rs;
     ret = mysql_conn.ExcuteQuery(sql, &rs);
     if (ret <= 0) {
@@ -240,10 +236,8 @@ bool System::regiest_to_meta_master() {
     sprintf(sql,
             "insert into kunlun_metadata_db.server_nodes "
             "set hostaddr='%s',nodemgr_port=%d,total_cpu_cores=8,"
-            "total_mem=16384,svc_since=current_timestamp(6),"
-            "comp_datadir='%s',datadir='%s',logdir='%s',wal_log_dir='%s'",
-            local_ip.c_str(),node_mgr_brpc_http_port,comp_datadir.c_str(),
-            datadir.c_str(),logdir.c_str(),wal_log_dir.c_str());
+            "total_mem=16384,svc_since=current_timestamp(6)",
+            local_ip.c_str(),node_mgr_brpc_http_port);
     ret = mysql_conn.ExcuteQuery(sql, &result_set);
     if (ret <= 0) {
       syslog(Logger::ERROR,

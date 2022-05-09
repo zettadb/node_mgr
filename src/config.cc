@@ -31,11 +31,6 @@ extern std::string meta_svr_ip;
 extern int64_t meta_svr_port;
 extern std::vector<Tpye_Ip_Port> vec_meta_ip_port;
 
-extern std::string comp_datadir;
-extern std::string datadir;
-extern std::string logdir;
-extern std::string wal_log_dir;
-
 extern int64_t node_mgr_brpc_http_port;
 extern std::string program_binaries_path;
 extern std::string instance_binaries_path;
@@ -205,11 +200,6 @@ void Configs::define_configs() {
   int slen = snprintf(def_log_path, sizeof(def_log_path), "./node_mgr-%d.log",
                       getpid());
   Assert(slen < sizeof(def_log_path));
-
-  define_str_config("comp_datadir", comp_datadir, "/home/kunlun", "comp_datadir path");
-  define_str_config("datadir", datadir, "/home/kunlun", "datadir path");
-  define_str_config("logdir", logdir, "/home/kunlun", "logdir path");
-  define_str_config("wal_log_dir", wal_log_dir, "/home/kunlun", "wal_log_dir path");
 
   define_str_config("log_file", log_file_path, def_log_path, "log file path");
 

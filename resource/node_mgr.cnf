@@ -62,22 +62,6 @@ brpc_http_port = 58002
 # cluster_mgr ip
 local_ip = 192.168.0.128
 
-# full paths to store data directories of all computing nodes
-# maybe /home/kunlun,/nvme2,/nvme3    note: no space in the middle of string
-comp_datadir = /home/kunlun
-
-# full paths to store data directories of all storage nodes
-# maybe /home/kunlun,/nvme2,/nvme3    note: no space in the middle of string
-datadir = /home/kunlun
-
-# full paths to store binlog dirs of all storage nodes
-# maybe /home/kunlun,/nvme2,/nvme3    note: no space in the middle of string
-logdir = /home/kunlun
-
-# full paths to store wal log dirs of all storage nodes
-# maybe /home/kunlun,/nvme2,/nvme3   note: no space in the middle of string
-wal_log_dir = /home/kunlun
-
 # program_binaries_path
 program_binaries_path = /home/kunlun/program_binaries
 
