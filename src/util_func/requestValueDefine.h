@@ -26,6 +26,10 @@ enum ClusterRequestTypes {
   kRequestTypeUndefined = 0,
   kPingPongType,
   kExecuteCommandType,
+  kInstallMySQLType,
+  kUninstallMySQLType,
+  kInstallPostgresType,
+  kUninstallPostgresType,
   kGetPathsSpaceType,
   kCheckPortIdleType,
   kInstallStorageType,
@@ -33,11 +37,21 @@ enum ClusterRequestTypes {
   kDeleteStorageType,
   kDeleteComputerType,
   kBackupShardType,
-  kRestoreStorageType,
-  kRestoreComputerType,
+  kBackupComputeType,
+  kRestoreMySQLType,
+  kRestorePostGresType,
   kControlInstanceType,
   kUpdateInstanceType,
-  kNodeExporterType,
+  //kNodeExporterType,
+  kInstallNodeExporterType,
+  kUninstallNodeExporterType,
+  kRebuildNodeType,
+
+  kKillMysqlType,
+  
+#ifndef NDEBUG
+  kNodeDebugType,
+#endif
 
   // addtional type should add above
   kRequestTypeMax = 1000

@@ -53,6 +53,7 @@ public:
   bool job_delete_storage(Json::Value &para, std::string &job_info);
   bool job_delete_computer(Json::Value &para, std::string &job_info);
   bool job_backup_shard(Json::Value &para, std::string &job_info);
+  bool job_backup_compute(Json::Value &para, std::string &job_info);
   bool job_restore_storage(Json::Value &para, std::string &job_info);
   bool job_restore_computer(Json::Value &para, std::string &job_info);
 };

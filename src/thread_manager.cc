@@ -8,7 +8,8 @@
 #include "sys_config.h"
 #include "global.h"
 #include "sys.h"
-#include "log.h"
+//#include "log.h"
+#include "zettalib/op_log.h"
 #include "config.h"
 #include "thread_manager.h"
 #include <signal.h>
@@ -117,9 +118,9 @@ void Thread_manager::start_signal_handler() {
   if ((error = pthread_create(&signal_hdlr_thrd,
                                    &thr_attr, signal_hander, 0))) {
 	char errmsg_buf[256];
-    syslog(Logger::ERROR,
-		"Can not create interrupt handler thread, error: %d, %s",
-		error, errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
+    KLOG_ERROR(
+		"Can not create interrupt handler thread, error: {}, {}",
+		error, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
     do_exit = 1;
   }
 
@@ -218,9 +219,9 @@ extern "C" void *signal_hander(void *arg) {
     if (error)
 	{
 		char errmsg_buf[256];
-		syslog(Logger::ERROR,
+		KLOG_ERROR(
 				"Fatal error in signal handler thread. sigwait/sigwaitinfo returned "
-				"error  (%d, %s)\n. Exiting signal handler thread",
+				"error  ({}, {})\n. Exiting signal handler thread",
 				errno, strerror_r(errno, errmsg_buf, sizeof(errmsg_buf)));
 		Thread_manager::do_exit = 1;
 	}
@@ -275,7 +276,7 @@ void Thread::run()
 	pid_t tid = gettid();
 	while (!Thread_manager::do_exit)
 	{
-		syslog(Logger::INFO, "Thread sleep_wait");
+		KLOG_INFO( "Thread sleep_wait");
 		Thread_manager::get_instance()->sleep_wait(this, thread_work_interval * 1000);
 	}
 }

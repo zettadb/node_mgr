@@ -19,17 +19,23 @@ public:
   explicit RequestDealer(const char *request_json_cstr)
       : request_json_str_(request_json_cstr), popen_p_(nullptr),
         deal_success_(false) {}
-  ~RequestDealer();
+  virtual ~RequestDealer();
 
-  bool ParseRequest();
-  bool Deal();
-  std::string FetchResponse();
+  bool virtual ParseRequest();
+  bool virtual Deal();
+  std::string virtual FetchResponse();
+  void virtual AppendExtraToResponse(Json::Value &);
 
-private:
-  bool protocalValid();
+protected:
+  bool virtual constructCommand();
+  bool virtual protocalValid();
+  bool virtual executeCommand();
+  std::string getStatusStr();
+  std::string getInfo();
+
+
+  // Will deprecated future
   bool pingPong();
-  bool executeCommand();
-  void constructCommand();
   bool getPathsSpace();
   bool checkPortIdle();
   bool installStorage();
@@ -37,20 +43,22 @@ private:
   bool deleteStorage();
   bool deleteComputer();
   bool backupShard();
+  bool backupCompute();
   bool restoreStorage();
   bool restoreComputer();
   bool controlInstance();
   bool updateInstance();
   bool nodeExporter();
-  std::string getStatusStr();
-  std::string getInfo();
+  bool rebuildNode();
+
+  bool KillMysqlByPort();
 
 private:
   // forbid copy
   RequestDealer(const RequestDealer &rht) = delete;
   RequestDealer &operator=(const RequestDealer &rht) = delete;
 
-private:
+protected:
   std::string request_json_str_;
   Json::Value json_root_;
   std::string execute_command_;

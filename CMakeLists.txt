@@ -15,7 +15,6 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
 	set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -Werror -O2")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Werror -O2")
 endif()
-
 #set(ZETTALIB_PATH "/home/snowao/code/kunlun/zettalib")
 if(NOT DEFINED ZETTALIB_PATH)
   message(FATAL_ERROR "ZETTALIB_PATH variable is not speicified, set by -DZETTALIB_PATH=?")
@@ -39,16 +38,19 @@ add_subdirectory(src/server_http)
 add_subdirectory(src/request_dealer)
 add_subdirectory(src/util)
 add_subdirectory(src/util_func)
+add_subdirectory(src/tcp_server)
+add_subdirectory(src/node_debug)
+add_subdirectory(src/install_task)
+add_subdirectory(src/restore_task)
+add_subdirectory(src/backup_task)
+add_subdirectory(src/rebuild_node)
 
 add_executable(node_mgr
-  src/config.cc 
-  src/log.cc 
+  src/config.cc  
   src/main.cc 
   src/os.cc 
   src/sys.cc 
   src/thread_manager.cc 
-  src/mysql_conn.cc 
-  src/pgsql_conn.cc 
   src/instance_info.cc 
   src/job.cc)
 configure_file(src/sys_config.h.in sys_config.h)
@@ -61,15 +63,22 @@ target_link_libraries(node_mgr
   server_http 
   request_dealer
   util_func 
+  node_debug
+  install_task
+  restore_task
+  backup_task
+  rebuild_node
   libzettalib.a 
   libbrpc.a 
   libprotobuf.a 
   libgflags.a 
   libleveldb.a 
   libjsoncpp.a
-  libmariadb.a 
+  libmariadb.a
+  libevent.a
   libpq.a 
-  pthread 
+  pthread
+  aio
   libssl.a 
   libcrypto.a 
   dl
@@ -80,12 +89,24 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX "${PROJECT_BINARY_DIR}/output" CACHE PATH "..." FORCE)
 endif()
 install(TARGETS node_mgr DESTINATION bin)
+install(TARGETS kl_server DESTINATION bin)
 install(TARGETS delay_demo DESTINATION bin/util)
 install(TARGETS download_file DESTINATION bin/util)
+install(TARGETS kl_tool DESTINATION bin/util)
+install(TARGETS test_client DESTINATION bin/util)
+install(TARGETS kunlun_flashback DESTINATION bin/util)
+install(TARGETS rebuild_node_tool DESTINATION bin/util)
+install(TARGETS safe_killmysql DESTINATION bin/util)
 install(FILES 
   resource/util/mydumper 
   resource/util/myloader
   resource/util/tablecatchup
+  resource/util/xtrabackup
+  resource/util/backup
+  resource/util/xbstream
+  resource/util/pv
+  resource/util/lz4
+  src/util/kunlun_flashback.sh
   PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   DESTINATION bin/util)
 install(FILES 
@@ -95,6 +116,8 @@ install(FILES
   PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
   DESTINATION bin)
 install(FILES resource/node_mgr.cnf DESTINATION conf)
+install(FILES resource/kl_server.cnf DESTINATION conf)
+install(FILES resource/libjemalloc.so.3.6.0 DESTINATION lib)
 install(DIRECTORY DESTINATION log)
 install(DIRECTORY DESTINATION data)
 

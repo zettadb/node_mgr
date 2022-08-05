@@ -8,8 +8,11 @@
 #define _KUNLUN_META_INFO_UTIL_FUNC_H_
 #include "requestValueDefine.h"
 #include "zettalib/op_mysql.h"
+#include "zettalib/tool_func.h"
+#include <sys/wait.h>
 
 namespace kunlun {
+
 extern std::string GenerateNewClusterIdStr(MysqlConnection *);
 ClusterRequestTypes GetReqTypeEnumByStr(const char *);
 bool RecognizedRequestType(ClusterRequestTypes);
@@ -17,6 +20,9 @@ bool RecognizedJobTypeStr(std::string &);
 bool ValidNetWorkAddr(const char *);
 std::string FetchNodemgrTmpDataPath(MysqlConnection *meta, const char *ip);
 int64_t FetchNodeMgrListenPort(MysqlConnection *meta, const char *ip);
+bool CheckPidStatus(pid_t pid, int& retcode, char* errinfo);
+std::string getCurrentProcessOwnerName();
+std::string TrimResponseInfo(std::string origInfo);
 
 } // namespace kunlun
 

@@ -7,9 +7,10 @@
 
 #include "config.h"
 #include "global.h"
-#include "log.h"
+//#include "log.h"
 #include "sys.h"
 #include "sys_config.h"
+#include "zettalib/tool_func.h"
 #include <limits.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -32,18 +33,22 @@ extern int64_t meta_svr_port;
 extern std::vector<Tpye_Ip_Port> vec_meta_ip_port;
 
 extern int64_t node_mgr_brpc_http_port;
+extern int64_t node_mgr_tcp_port;
+extern std::string tcp_server_file;
 extern std::string program_binaries_path;
 extern std::string instance_binaries_path;
 extern std::string storage_prog_package_name;
 extern std::string computer_prog_package_name;
-
+extern std::string log_file_path;
+extern int64_t max_log_file_size;
 extern std::string node_mgr_util_path;
 extern std::string node_mgr_tmp_data_path;
 extern std::string prometheus_path;
 extern int64_t prometheus_port_start;
 extern std::string local_ip;
 
-Configs *Configs::get_instance() {
+Configs *Configs::get_instance()
+{
   if (m_inst == NULL)
     m_inst = new Configs(System::get_instance()->get_config_path());
   return m_inst;
@@ -54,7 +59,8 @@ Configs::Configs(const std::string &cfg_path) { define_configs(); }
 /*
         Return if 'name' is already defined as a config parameter.
 */
-bool Configs::check_name_conflicts(const char *name) {
+bool Configs::check_name_conflicts(const char *name)
+{
   std::string sname(name);
 
   if (bool_cfgs.find(sname) != bool_cfgs.end())
@@ -71,7 +77,8 @@ bool Configs::check_name_conflicts(const char *name) {
 }
 
 void Configs::define_bool_config(const char *name, bool &holder, bool def,
-                                 const char *comment) {
+                                 const char *comment)
+{
   if (check_name_conflicts(name))
     return;
 
@@ -84,7 +91,8 @@ void Configs::define_bool_config(const char *name, bool &holder, bool def,
 }
 
 void Configs::define_str_config(const char *name, std::string &holder,
-                                const char *def, const char *comment) {
+                                const char *def, const char *comment)
+{
   if (check_name_conflicts(name))
     return;
   Config_entry_str *cei = new Config_entry_str;
@@ -97,7 +105,8 @@ void Configs::define_str_config(const char *name, std::string &holder,
 
 void Configs::define_uint_config(const char *name, uint64_t &holder,
                                  uint64_t min, uint64_t max, uint64_t def,
-                                 const char *comment) {
+                                 const char *comment)
+{
   if (check_name_conflicts(name))
     return;
   Config_entry_uint *cei = new Config_entry_uint;
@@ -111,7 +120,8 @@ void Configs::define_uint_config(const char *name, uint64_t &holder,
 }
 
 void Configs::define_int_config(const char *name, int64_t &holder, int64_t min,
-                                int64_t max, int64_t def, const char *comment) {
+                                int64_t max, int64_t def, const char *comment)
+{
   if (check_name_conflicts(name))
     return;
   Config_entry_int *cei = new Config_entry_int;
@@ -127,7 +137,8 @@ void Configs::define_int_config(const char *name, int64_t &holder, int64_t min,
 void Configs::define_enum_config(const char *name, int &holder,
                                  const char **options,
                                  long unsigned int num_opts,
-                                 const char *def_option, const char *comment) {
+                                 const char *def_option, const char *comment)
+{
   if (check_name_conflicts(name))
     return;
   Config_entry_enum *cei = new Config_entry_enum;
@@ -138,8 +149,10 @@ void Configs::define_enum_config(const char *name, int &holder,
   cei->num_options = num_opts;
 
   int def = -1;
-  for (int i = 0; i < num_opts; i++) {
-    if (strcasecmp(def_option, options[i]) == 0) {
+  for (int i = 0; i < num_opts; i++)
+  {
+    if (strcasecmp(def_option, options[i]) == 0)
+    {
       def = i;
       break;
     }
@@ -153,7 +166,8 @@ void Configs::define_enum_config(const char *name, int &holder,
 /*
         Define the set of config parameters and their default values.
 */
-void Configs::define_configs() {
+void Configs::define_configs()
+{
   define_int_config("mysql_connect_timeout", mysql_connect_timeout, 1, 1000000,
                     10, "MySQL client connection timeout in seconds.");
   define_int_config("mysql_read_timeout", mysql_read_timeout, 1, 1000000, 20,
@@ -163,11 +177,11 @@ void Configs::define_configs() {
   define_int_config("mysql_max_packet_size", mysql_max_packet_size, 65535,
                     1024 * 1024 * 1024, 1024 * 1024 * 1024,
                     "MySQL client max packet size in bytes.");
-  define_enum_config(
+  /*define_enum_config(
       "log_verbosity", (int &)log_verbosity, Logger::log_verbosity_options,
       sizeof(Logger::log_verbosity_options) / sizeof(char *), "INFO",
       "Log verbosity or amount of details, options are(in increasing "
-      "details):{ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.");
+      "details):{ERROR, WARNING, INFO, LOG, DEBUG1, DEBUG2, DEBUG3}.");*/
   define_int_config("max_log_file_size", max_log_file_size, 10, 10000, 100,
                     "Max log file size in mega bytes(MB). When a log file "
                     "grows larger than this, a new one is created and used.");
@@ -195,6 +209,12 @@ void Configs::define_configs() {
 
   define_int_config("brpc_http_port", node_mgr_brpc_http_port, 1000,
                     65535, 5011, "node_mgr brpc http server listen port.");
+
+  define_int_config("nodemgr_tcp_port", node_mgr_tcp_port, 1000,
+                    65535, 5012, "node_mgr tcp server listen port.");
+
+  define_str_config("kl_server_file", tcp_server_file, 
+                  "../conf/kl_server.cnf", "tcp server configure file");
 
   char def_log_path[64];
   int slen = snprintf(def_log_path, sizeof(def_log_path), "./node_mgr-%d.log",
@@ -247,7 +267,8 @@ The setters return 0 if successful;
 @param val the value string to assign to the parameter, it must be a
 valid value of its type, and must be in valid range for uint/int params.
 */
-int Configs::set_cfg(const std::string &name, const char *val) {
+int Configs::set_cfg(const std::string &name, const char *val)
+{
   int ret = 0;
   if (bool_cfgs.find(name) != bool_cfgs.end())
     ret = set_bool_cfg(name, val);
@@ -261,23 +282,24 @@ int Configs::set_cfg(const std::string &name, const char *val) {
     ret = set_enum_cfg(name, val);
   else
     ret = -1;
-  switch (ret) {
+  switch (ret)
+  {
   case 0:
     break;
   case -1:
-    syslog(Logger::ERROR, "Variable name %s does not exist", name.c_str());
+    fprintf(stderr, "Variable name %s does not exist", name.c_str());
     break;
   case -2:
-    syslog(Logger::ERROR,
+    fprintf(stderr,
            "Variable %s value %s not valid or can not be interpreted.",
            name.c_str(), val);
     break;
   case -3:
-    syslog(Logger::ERROR, "Variable %s value %s does not match its type.",
+    fprintf(stderr, "Variable %s value %s does not match its type.",
            name.c_str(), val);
     break;
   case -4:
-    syslog(Logger::ERROR,
+    fprintf(stderr,
            "Variable %s value %s is not in its type's valid range.",
            name.c_str(), val);
     break;
@@ -291,12 +313,15 @@ int Configs::set_cfg(const std::string &name, const char *val) {
   return ret;
 }
 
-int Configs::set_uint_cfg(const std::string &name, const char *val) {
+int Configs::set_uint_cfg(const std::string &name, const char *val)
+{
   char *endptr = NULL;
   bool is_neg = false;
   uint64_t ival = strtoull(val, &endptr, 0);
-  for (const char *p = val; *p; p++) {
-    if (!isspace(*p)) {
+  for (const char *p = val; *p; p++)
+  {
+    if (!isspace(*p))
+    {
       if (*p == '-')
         is_neg = true;
       break;
@@ -310,8 +335,9 @@ int Configs::set_uint_cfg(const std::string &name, const char *val) {
   if (ival == ULLONG_MAX and errno == ERANGE)
     return -4;
   Config_entry_uint *ceu = uint_cfgs.find(name)->second;
-  if (ceu->min > ival || ival > ceu->max) {
-    syslog(Logger::ERROR,
+  if (ceu->min > ival || ival > ceu->max)
+  {
+    fprintf(stderr,
            "Variable %s value %s is not in its defined valid range [%lu, %lu].",
            name.c_str(), val, ceu->min, ceu->max);
     return -5;
@@ -320,7 +346,8 @@ int Configs::set_uint_cfg(const std::string &name, const char *val) {
   return 0;
 }
 
-int Configs::set_int_cfg(const std::string &name, const char *val) {
+int Configs::set_int_cfg(const std::string &name, const char *val)
+{
   char *endptr = NULL;
   uint64_t ival = strtoll(val, &endptr, 0);
 
@@ -329,8 +356,9 @@ int Configs::set_int_cfg(const std::string &name, const char *val) {
   if (ival == ULLONG_MAX and errno == ERANGE)
     return -4;
   Config_entry_int *cei = int_cfgs.find(name)->second;
-  if (cei->min > ival || ival > cei->max) {
-    syslog(Logger::ERROR,
+  if (cei->min > ival || ival > cei->max)
+  {
+    fprintf(stderr,
            "Variable %s value %s is not in its defined valid range [%ld, %ld].",
            name.c_str(), val, cei->min, cei->max);
     return -5;
@@ -339,13 +367,15 @@ int Configs::set_int_cfg(const std::string &name, const char *val) {
   return 0;
 }
 
-int Configs::set_str_cfg(const std::string &name, const char *val) {
+int Configs::set_str_cfg(const std::string &name, const char *val)
+{
   Config_entry_str *cei = str_cfgs.find(name)->second;
   *(cei->value_holder) = val;
   return 0;
 }
 
-int Configs::set_bool_cfg(const std::string &name, const char *val) {
+int Configs::set_bool_cfg(const std::string &name, const char *val)
+{
   Config_entry_bool *cei = bool_cfgs.find(name)->second;
   bool v = false;
   if (strcasecmp(val, "true") == 0 || strcasecmp(val, "on") == 0 ||
@@ -360,17 +390,22 @@ int Configs::set_bool_cfg(const std::string &name, const char *val) {
   return 0;
 }
 
-int Configs::set_enum_cfg(const std::string &name, const char *val) {
+int Configs::set_enum_cfg(const std::string &name, const char *val)
+{
   char *endptr = NULL;
   std::string sval;
 
   bool started = false;
 
   // fetch valid enum value
-  for (const char *p = val; *p; p++) {
-    if (!started && !isspace(*p)) {
+  for (const char *p = val; *p; p++)
+  {
+    if (!started && !isspace(*p))
+    {
       started = true;
-    } else if (started && isspace(*p)) {
+    }
+    else if (started && isspace(*p))
+    {
       started = false;
       break;
     }
@@ -382,7 +417,8 @@ int Configs::set_enum_cfg(const std::string &name, const char *val) {
   Config_entry_enum *cei = enum_cfgs.find(name)->second;
   int eval = -1;
   for (int i = 0; i < cei->num_options; i++)
-    if (strcasecmp(sval.c_str(), cei->options[i]) == 0) {
+    if (strcasecmp(sval.c_str(), cei->options[i]) == 0)
+    {
       eval = i;
       break;
     }
@@ -400,21 +436,25 @@ int Configs::set_enum_cfg(const std::string &name, const char *val) {
 
         Such vars don't have default values to use, so they must be assigned.
 */
-int Configs::check_key_vars_set(std::string &vars) {
+int Configs::check_key_vars_set(std::string &vars)
+{
   int cnt = 0;
-  if (log_file_path.length() == 0) {
+  if (log_file_path.length() == 0)
+  {
     cnt++;
     vars += "; log_file";
   }
   return cnt;
 }
 
-class FILE_closer {
+class FILE_closer
+{
   FILE *_fp;
 
 public:
   FILE_closer(FILE *fp) : _fp(fp) {}
-  ~FILE_closer() {
+  ~FILE_closer()
+  {
     if (_fp)
       fclose(_fp);
   }
@@ -424,15 +464,16 @@ public:
         Return 0 on success;
         -9 on log entry format error
         -8 if there are vars that must be assigned a value are not so.
-        -10 meta_group_seeds is invalid
 */
-int Configs::process_config_file(const std::string &fn) {
+int Configs::process_config_file(const std::string &fn)
+{
   char line[1024];
   FILE *fp = fopen(fn.c_str(), "r");
   int ret = 0;
   FILE_closer fcloser(fp);
 
-  while (fgets(line, sizeof(line), fp)) {
+  while (fgets(line, sizeof(line), fp))
+  {
     char *p;
     /* trim spaces from start of log entry (and also name string). */
     for (p = line; *p; p++)
@@ -443,8 +484,9 @@ int Configs::process_config_file(const std::string &fn) {
       continue;
 
     char *s = strchr(p, '=');
-    if (!s || s <= p) {
-      syslog(Logger::ERROR, "Invalid log file format in line '%s'", line);
+    if (!s || s <= p)
+    {
+      fprintf(stderr, "Invalid log file format in line '%s'", line);
       return -9;
     }
 
@@ -470,7 +512,7 @@ int Configs::process_config_file(const std::string &fn) {
 
     if (q >= r) // no value part
     {
-      syslog(Logger::ERROR, "Invalid log file format in line '%s'", line);
+      fprintf(stderr, "Invalid log file format in line '%s'", line);
       return -9;
     }
 
@@ -480,39 +522,28 @@ int Configs::process_config_file(const std::string &fn) {
 
   std::string bad_vars;
   int nbad = 0;
-  if ((nbad = check_key_vars_set(bad_vars)) > 0) {
-    syslog(
-        Logger::ERROR,
+  if ((nbad = check_key_vars_set(bad_vars)) > 0)
+  {
+    fprintf(stderr,
         "Some (%d) critical variables in config file not assigned a value : %s",
         nbad, bad_vars.c_str());
     return -8;
   }
 
   // get meta_ip_port by meta_group_seeds
-  char *cStart, *cEnd;
-  cStart = (char *)meta_group_seeds.c_str();
-  while (*cStart != '\0') {
-    cEnd = strchr(cStart, ':');
-    if (cEnd == NULL)
-      break;
-
-    meta_svr_ip = std::string(cStart, cEnd - cStart);
-
-    cStart = cEnd + 1;
-    cEnd = strchr(cStart, ',');
-    meta_svr_port = atoi(cStart);
-    if (cEnd == NULL)
-      *cStart = '\0';
-    else
-      cStart = cEnd + 1;
-
-    vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
-  }
-
-  if (vec_meta_ip_port.size() == 0) {
-    syslog(Logger::ERROR, "meta_group_seeds is invalid : %s",
+  std::vector<std::string> meta_ipports = kunlun::StringTokenize(meta_group_seeds, 
+            ",");
+  if(meta_ipports.size() == 0) {
+    fprintf(stderr, "meta_group_seeds is invalid : %s",
            meta_group_seeds.c_str());
     return -10;
+  }
+
+  for(size_t i=0; i<meta_ipports.size();i++) {
+    std::string meta_svr_ip = meta_ipports[i].substr(0, meta_ipports[i].rfind(":"));
+    std::string sport = meta_ipports[i].substr(meta_ipports[i].rfind(":")+1);
+    int meta_svr_port = atoi(sport.c_str());
+    vec_meta_ip_port.emplace_back(std::make_pair(meta_svr_ip, meta_svr_port));
   }
 
   return 0;

@@ -44,6 +44,18 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "execute_command"_hash:
     type_enum = kExecuteCommandType;
     break;
+  case "install_mysql"_hash:
+    type_enum = kInstallMySQLType;
+    break;
+  case "uninstall_mysql"_hash:
+    type_enum = kUninstallMySQLType;
+    break;
+  case "install_postgres"_hash:
+    type_enum = kInstallPostgresType;
+    break;
+  case "uninstall_postgres"_hash:
+    type_enum = kUninstallPostgresType;
+    break;
   case "get_paths_space"_hash:
     type_enum = kGetPathsSpaceType;
     break;
@@ -65,11 +77,14 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "backup_shard"_hash:
     type_enum = kBackupShardType;
     break;
-  case "restore_storage"_hash:
-    type_enum = kRestoreStorageType;
+  case "backup_compute"_hash:
+    type_enum = kBackupComputeType;
     break;
-  case "restore_computer"_hash:
-    type_enum = kRestoreComputerType;
+  case "restore_mysql"_hash:
+    type_enum = kRestoreMySQLType;
+    break;
+  case "restore_postgres"_hash:
+    type_enum = kRestorePostGresType;
     break;
 
   case "control_instance"_hash:
@@ -78,9 +93,28 @@ ClusterRequestTypes GetReqTypeEnumByStr(const char *type_str) {
   case "update_instance"_hash:
     type_enum = kUpdateInstanceType;
     break;
-  case "node_exporter"_hash:
-    type_enum = kNodeExporterType;
+  //case "node_exporter"_hash:
+  //  type_enum = kNodeExporterType;
+  //  break;
+  case "install_node_exporter"_hash:
+    type_enum = kInstallNodeExporterType;
     break;
+  case "uninstall_node_exporter"_hash:
+    type_enum = kUninstallNodeExporterType;
+    break;
+  case "rebuild_node"_hash:
+    type_enum = kRebuildNodeType;
+    break;
+
+  case "kill_mysql"_hash:
+    type_enum = kKillMysqlType;
+    break;
+    
+#ifndef NDEBUG
+  case "node_debug"_hash:
+    type_enum = kNodeDebugType;
+    break;
+#endif
 
   // addtional type convert should add above
   default:
@@ -134,6 +168,62 @@ int64_t FetchNodeMgrListenPort(MysqlConnection *meta, const char *ip) {
     return -1;
   }
   return ::atoi(result[0]["port"]);
+}
+
+bool CheckPidStatus(pid_t pid, int& retcode, char* errinfo) {
+  int status = 0;
+	if(pid <= 0) {
+		snprintf(errinfo, 4096, "pid: %d is not Positive", pid);
+		retcode = -1;
+		return true;
+	}
+	
+    pid_t check_pid = waitpid (pid , &status , WNOHANG);
+    if (check_pid == 0) { //child pid alive
+        return false;
+    }
+    else if (check_pid < 0) {
+        if (errno != EINTR) {
+            snprintf(errinfo, 4096, "waitpid %d failed: %d,%s" , pid, errno, strerror(errno));
+            retcode = -1 * errno;
+            return true;
+        }
+        else { //interrupt
+            return false;
+        }
+    }
+    else {  //>0 child pid exit
+        if (WIFEXITED(status)) {
+            retcode = WEXITSTATUS(status);
+        }
+        else if (WIFSIGNALED(status)) {
+            retcode = WTERMSIG(status);
+        }
+        else {
+            retcode = status;
+        }
+        return true;
+    }
+}
+
+std::string getCurrentProcessOwnerName(){
+  char buff[1024] = {'\0'};
+  getlogin_r(buff,1024);
+  return std::string(const_cast<const char *>(buff));
+}
+
+
+std::string TrimResponseInfo(std::string origInfo) {
+  std::string result;
+  result = trim(origInfo);
+  result = StringReplace(result, "'", " ");
+  result = StringReplace(result, "\"", " ");
+  result = StringReplace(result, "\n", " ");
+  result = StringReplace(result, "\t", " ");
+  result = StringReplace(result, "\r", " ");
+  result = StringReplace(result, "\f", " ");
+  result = StringReplace(result, "\v", " ");
+  return result;
 }
 
 }; // namespace kunlun

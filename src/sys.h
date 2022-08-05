@@ -32,8 +32,7 @@ private:
 	mutable pthread_mutexattr_t mtx_attr;
 
 	System(const std::string &cfg_path) : auto_pullup_working(true),
-																				config_path(cfg_path)
-	{
+			config_path(cfg_path) {
 		pthread_mutexattr_init(&mtx_attr);
 		pthread_mutexattr_settype(&mtx_attr, PTHREAD_MUTEX_RECURSIVE);
 		pthread_mutex_init(&mtx, &mtx_attr);
@@ -59,6 +58,11 @@ public:
 		Scopped_mutex sm(mtx);
 		Instance_info::get_instance()->keepalive_instance();
 	}
+	static void loop_exporter();
+	void keepalive_exporter(); // {
+	//	Scopped_mutex sm(mtx);
+	//	Instance_info::get_instance()->keepalive_exporter();
+	//}
 
 	~System();
 	static int create_instance(const std::string &cfg_path);
@@ -67,9 +71,11 @@ public:
 		Assert(m_global_instance != NULL);
 		return m_global_instance;
 	}
+
 	static bool connet_to_meta_master();
 	static bool regiest_to_meta_master();
 
+	bool GetClusterMgrFromMeta(std::string &cluster_mgr);
 	const std::string &get_config_path() const
 	{
 		Scopped_mutex sm(mtx);
