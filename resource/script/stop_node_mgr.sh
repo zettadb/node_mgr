@@ -5,7 +5,6 @@
 BINPATH=`pwd`
 SBINPATH=`eval echo "${BINPATH}"`
 FPATH=${SBINPATH%/*}
-ps -ef | grep kl_server | grep ${FPATH} | grep -v grep | grep -v vim | awk '{print $2}' | xargs kill -9
 ps -ef | grep node_mgr | grep ${FPATH} | grep -v grep | grep -v vim | awk '{print $2}' | xargs kill -9
 
 
