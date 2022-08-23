@@ -72,6 +72,11 @@ bool MySQLInstallDealer::constructCommand() {
   std::string command_name = para_json["command_name"].asString();
   std::string port = para_json["port"].asString();
   exporter_port_ = para_json["exporter_port"].asString();
+  std::string mgr_port = para_json["mgr_port"].asString();
+  std::string xport = para_json["xport"].asString();
+  std::string mgr_seed = para_json["mgr_seed"].asString();
+  std::string mgr_uuid = para_json["mgr_uuid"].asString();
+  std::string is_master = para_json["is_master"].asString();
   std::string innodb_buffer_size_M =
       para_json["innodb_buffer_size_M"].asString();
   std::string db_cfg = para_json["db_cfg"].asString();
@@ -80,16 +85,16 @@ bool MySQLInstallDealer::constructCommand() {
       "%s/kunlun_install_%s.log",
       kunlun::GetBasePath(program_binaries_path).c_str(), port.c_str());
   execute_command_ = kunlun::string_sprintf(
-      "%s/%s/dba_tools/%s --port=%s --innodb_buffer_poll_size_M=%s "
+      "%s/%s/dba_tools/%s --port=%s --mgr_port=%s --xport=%s --innodb_buffer_poll_size_M=%s "
       "--datadir_prefix=%s --logdir_prefix=%s --waldir_prefix=%s "
-      "--install_prefix=%s/storage --user=%s --bind_address=%s --db_cfg=%s "
+      "--install_prefix=%s/storage --user=%s --bind_address=%s --mgr_seed=%s --db_cfg=%s --uuid=%s --is_master=%s "
       "--prog_name=%s >> %s ",
       program_binaries_path.c_str(), storage_prog_package_name.c_str(),
-      command_name.c_str(), port.c_str(), innodb_buffer_size_M.c_str(),
+      command_name.c_str(), port.c_str(), mgr_port.c_str(), xport.c_str(), innodb_buffer_size_M.c_str(),
       data_prefix_.c_str(), log_prefix_.c_str(), wal_prefix_.c_str(),
       instance_binaries_path.c_str(),
-      kunlun::getCurrentProcessOwnerName().c_str(), local_ip.c_str(),
-      db_cfg.c_str(), storage_prog_package_name.c_str(), install_log.c_str());
+      kunlun::getCurrentProcessOwnerName().c_str(), local_ip.c_str(), mgr_seed.c_str(),
+      db_cfg.c_str(), mgr_uuid.c_str(), is_master.c_str(), storage_prog_package_name.c_str(), install_log.c_str());
   return true;
 }
 
