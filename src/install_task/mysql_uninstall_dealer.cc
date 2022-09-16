@@ -71,6 +71,8 @@ bool MySQLUninstallDealer::constructCommand() {
   Json::Value para_json = json_root_["paras"];
   std::string command_name = para_json["command_name"].asString();
   std::string port = para_json["port"].asString();
+  std::string mgr_port = para_json["mgr_port"].asString();
+  std::string xport = para_json["xport"].asString();
   std::string innodb_buffer_size_M =
       para_json["innodb_buffer_size_M"].asString();
   // fetch related directory prefix from Metadata cluster
@@ -78,12 +80,12 @@ bool MySQLUninstallDealer::constructCommand() {
       "%s/kunlun_install.log",
       kunlun::GetBasePath(program_binaries_path).c_str());
   execute_command_ = kunlun::string_sprintf(
-      "%s/%s/dba_tools/%s --port=%s --innodb_buffer_poll_size_M=%s "
+      "%s/%s/dba_tools/%s --port=%s --mgr_port=%s --xport=%s --innodb_buffer_poll_size_M=%s "
       "--datadir_prefix=%s --logdir_prefix=%s --waldir_prefix=%s "
       "--install_prefix=%s/storage --user=%s --bind_address=%s --prog_name=%s "
       ">> %s ",
       program_binaries_path.c_str(), storage_prog_package_name.c_str(),
-      command_name.c_str(), port.c_str(), innodb_buffer_size_M.c_str(),
+      command_name.c_str(), port.c_str(), mgr_port.c_str(), xport.c_str(), innodb_buffer_size_M.c_str(),
       data_prefix_.c_str(), log_prefix_.c_str(), wal_prefix_.c_str(),
       instance_binaries_path.c_str(),
       kunlun::getCurrentProcessOwnerName().c_str(), local_ip.c_str(),
